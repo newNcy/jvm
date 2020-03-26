@@ -23,18 +23,18 @@ typedef int64_t jlong;
 typedef double jdouble;
 typedef uint32_t jreference;
 
-enum JType
+enum jtype 
 {
 	VOID,
-	BOOLEAN,
+	BOOLEAN = 4,
+	CHAR,
+	FLOAT,
+	DOUBLE,
 	BYTE,
 	SHORT,
-	CHAR,
 	INT,
-	FLOAT,
-	OBJECT,
 	LONG, 
-	DOUBLE,
+	OBJECT,
 };
 
 union jvalue
@@ -144,13 +144,13 @@ struct field : public name_and_type_meta
 {
 	bool is_field() { return true; }
 	int offset = -1;
-	JType type;
+	jtype type;
 };
 struct method : public name_and_type_meta 
 {
 	bool is_method() { return true; }
-	std::vector<JType> arg_types;
-	JType ret_type;
+	std::vector<jtype> arg_types;
+	jtype  ret_type;
 };
 
 struct const_pool
@@ -230,5 +230,6 @@ struct array_claxx : public claxx
 {
 	bool is_array() { return true; }
 	claxx * component = nullptr;
+	jtype componen_type;
 };
 

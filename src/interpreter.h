@@ -61,6 +61,7 @@ enum {
 	INVOKESPECIAL	= 0xb7,
 	INVOKESTATIC	= 0xb8,
 	NEW				= 0xbb,
+	NEWARRAY		,
 	ATHROW			= 0xbf,
 	MONITERENTER	= 0xc2,
 	MONITEREXIT		= 0xc3,

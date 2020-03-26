@@ -13,7 +13,7 @@ class jvm
 	std::vector<thread *> threads;
 	public:
 	thread * new_thread();
-	jvm():cloader(memery::alloc_meta<classloader>()) {}
+	jvm();
 	~jvm();
 	void load_runtime(const std::string & runtime_path);
 	void run(std::vector<std::string> args);

@@ -1,6 +1,10 @@
 #include "jvm.h"
 #include "classloader.h"
 
+jvm::jvm():cloader(memery::alloc_meta<classloader>()) 
+{
+
+}
 
 void jvm::load_runtime(const std::string & runtime_path)
 {
@@ -37,9 +41,12 @@ void jvm::run(std::vector<std::string> args)
 		printf("main method should be public and static\n");
 		return;
 	}
+	main_thread->push_frame(main_method);
+	main_thread->current_frame->locals->put<jint>(128,0);
+	main_thread->start(); 
+} 
 
-	main_thread->current_stack.push<jint>(128);
-	main_thread->start(main_method); } jvm::~jvm()
+jvm::~jvm()
 {
 	if (cloader->rt_jar) zip_close(cloader->rt_jar);
 }

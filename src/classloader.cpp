@@ -339,7 +339,7 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 		if (!m->is_static()) m->arg_types.push_back(INT);
 		m->ret_type = type_of_method_disc(m->discriptor, m->arg_types);
 
-		printf("method native:%d %s:%s\n", m->is_native(), m->name->c_str(), m->discriptor->c_str());
+		//printf("method native:%d %s:%s\n", m->is_native(), m->name->c_str(), m->discriptor->c_str());
 		u2 attr_count = stream.get<u2>();
 		while (attr_count --) {
 			attribute * attr = parse_attribute(stream, raw_pool);
@@ -791,7 +791,7 @@ annotation * classloader::parse_annotation(byte_stream & stream)
 	return ann;
 }
 		
-JType classloader::type_of_disc(char c)
+jtype classloader::type_of_disc(char c)
 {
 	switch (c) {
 		case 'B':
@@ -819,7 +819,7 @@ JType classloader::type_of_disc(char c)
 	}
 }
 
-JType classloader::type_of_method_disc(symbol * dis,std::vector<JType> & args)
+jtype classloader::type_of_method_disc(symbol * dis,std::vector<jtype> & args)
 {
 	int i;
 	for (i = 1 ; i < dis->length-1; i ++) {

@@ -88,16 +88,21 @@ struct frame
 {
 	const_pool		* current_const_pool = nullptr;
 	method			* current_method = nullptr;
+	thread			* current_thread = nullptr;
 	claxx			* current_class = nullptr;
 	frame			* caller_frame = nullptr;
 	any_array		* locals = nullptr;
 	operand_stack	* stack = nullptr;
 	code_attr		* code = nullptr;
 
+	void pc_offset(u2 offset) 
+	{
+		pc.rd += offset - 1;
+	}
 	byte_stream pc;
 	timeval start_time;
 	public:
-	frame(frame * caller, method * to_call);
+	frame(frame * caller, method * to_call, thread *);
 	void exec();
 	~frame();
 };
@@ -105,16 +110,11 @@ struct frame
 struct jvm;
 struct thread
 {
-	jvm * vm = nullptr;
-	frame * current_frame = nullptr;
-	claxx * current_class = nullptr;
-	method * current_method = nullptr;
-	const_pool * current_const_pool = nullptr;
-	byte_stream * code = nullptr;
-	void pc_offset(u2 offset) 
-	{
-		if (code) code->rd += offset - 1;
-	}
+	const_pool		* current_const_pool = nullptr;
+	method			* current_method = nullptr;
+	frame			* current_frame = nullptr;
+	claxx			* current_class = nullptr;
+	jvm				* vm = nullptr;
 	jreference create_string(const std::string & bytes)
 	{
 		return 0;
@@ -125,10 +125,8 @@ struct thread
 	
 	void run();
 	bool handle_exception();
-	void start(method * entry) 
+	void start() 
 	{
-		if (!entry) return;
-		push_frame(entry);
 		run();
 	}
 };
