@@ -1,7 +1,17 @@
 
 #include "thread.h"
+#include "class.h"
 #include "classfile.h"
 #include "interpreter.h"
+#include "jvm.h"
+#include "native.h"
+
+#include <alloca.h>
+#include <cstdint>
+#include <cstdio>
+#include <ffi-x86_64.h>
+#include <ffi.h>
+#include <stdexcept>
 
 frame::frame(frame * caller, method * to_call, thread * context ):caller_frame(caller), current_method(to_call), current_class(to_call->owner)
 {
@@ -19,12 +29,17 @@ frame::frame(frame * caller, method * to_call, thread * context ):caller_frame(c
 
 	gettimeofday(&start_time, nullptr);
 
+}
+
+void frame::setup_args()
+{
 	int idx = 0;
 	int argid = 1;
-	printf("add frame [%s.%s]\n", current_class->name->c_str(), current_method->name->c_str());
-	for (auto type : to_call->arg_types) {
+	printf("add frame [%s.%s] arg num %ld\n", current_class->name->c_str(), current_method->name->c_str(), current_method->arg_types.size());
+	for (auto type : current_method->arg_types) {
+		if (idx == current_method->arg_types.size()) break;
 		switch (type) {
-			case LONG:
+			case T_LONG:
 				{
 					jlong v = stack->pop<jlong>();
 					printf("arg%d long:%ld\n", argid++, v);
@@ -32,7 +47,7 @@ frame::frame(frame * caller, method * to_call, thread * context ):caller_frame(c
 					idx += 2;
 				}
 				break;
-			case DOUBLE:
+			case T_DOUBLE:
 				{
 					jdouble v = stack->pop<jdouble>();
 					printf("arg%d double:%lf\n", argid++, v);
@@ -40,7 +55,7 @@ frame::frame(frame * caller, method * to_call, thread * context ):caller_frame(c
 					idx += 2;
 				}
 				break;
-			case FLOAT:
+			case T_FLOAT:
 				{
 					jfloat v = stack->pop<jfloat>();
 					printf("arg%d float:%f\n", argid++, v);
@@ -58,38 +73,18 @@ frame::frame(frame * caller, method * to_call, thread * context ):caller_frame(c
 		}
 	}
 	printf("-------------------\n");
+
 }
 
 frame::~frame()
 {
 }
 
-void thread::push_frame(method * m)
-{
-	if (!m) return;
-	frame * new_frame = new frame(current_frame, m, this);
-	current_frame = new_frame;
-	if (!current_frame) return;
-	//arguments
-	int idx = m->arg_types.size() -1 ;
-	for (int i = idx; i >= 0; i --) {
-		switch (m->arg_types[i]) {
-			case LONG:
-			case DOUBLE:
-				new_frame->stack->push<jlong>(current_frame->stack->pop<jlong>());
-				break;
-			default:
-				new_frame->stack->push<jint>(current_frame->stack->pop<jint>());
-				break;
-
-		}
-	}
-}
 
 void thread::run()
 {
-	if (!current_frame) return;
-	current_frame->exec();
+	while (current_frame) {
+	}
 }
 
 void thread::pop_frame()
@@ -100,40 +95,190 @@ void thread::pop_frame()
 	timeval & start_time = current_frame->start_time;
 	frame * next = current_frame->caller_frame;
 	delete current_frame;
-
-	memery::dealloc_meta<frame>(current_frame);
 	current_frame = next;
-	if (!current_frame) {
-		return;
-	}
-	current_method = current_frame->current_method;
-	current_class = current_method->owner;
-	current_const_pool = current_class->cpool;
 }
-	
+
 bool thread::handle_exception()
 {
-		std::stack<method*> unhandle_methods;
-		jreference e = current_frame->stack->top<jreference>();
-		object * obj = memery::ref2oop(e);
-		for (;current_frame;) {
-			for (exception & e : current_frame->code->exceptions) {
-				u2 cur_pc = current_frame->pc.rd;
-				if (e.start_pc <= cur_pc && cur_pc <= e.end_pc) {
-					current_frame->pc.rd = e.handler_pc;
-					printf("%s handle by %s.%s:%s\n", obj->meta->name->c_str(), current_class->name->c_str(), current_method->name->c_str(), current_method->discriptor->c_str());
-					return true;
-				}
+	std::stack<method*> unhandle_methods;
+	jreference e = current_frame->stack->top<jreference>();
+	object * obj = memery::ref2oop(e);
+	for (;current_frame;) {
+		for (exception & e : current_frame->code->exceptions) {
+			u2 cur_pc = current_frame->pc.rd;
+			if (e.start_pc <= cur_pc && cur_pc <= e.end_pc) {
+				current_frame->pc.rd = e.handler_pc;
+				printf("%s handle by %s.%s:%s\n", obj->meta->name->c_str(), 
+						current_frame->current_class->name->c_str(), 
+						current_frame->current_method->name->c_str(), 
+						current_frame->current_method->discriptor->c_str());
+				return true;
 			}
-			unhandle_methods.push(current_frame->current_method);
-			pop_frame();
 		}
-		printf("unhandle exception %s at:\n", obj->meta->name->c_str());
-		while (!unhandle_methods.empty()) {
-			auto m = unhandle_methods.top();
-			unhandle_methods.pop();
-			printf("in %s\n", m->name->c_str());
+		unhandle_methods.push(current_frame->current_method);
+		pop_frame();
+	}
+	printf("unhandle exception %s at:\n", obj->meta->name->c_str());
+	while (!unhandle_methods.empty()) {
+		auto m = unhandle_methods.top();
+		unhandle_methods.pop();
+		printf("in %s\n", m->name->c_str());
+	}
+	return false;
+}
+
+void frame::print_stack() 
+{
+	printf("\tstack(%d) [",stack->size());
+	for (any_array::iterator i = stack->begin(); i != stack->end(); i++) {
+		if (stack->types[i-stack->begin()] == T_LONG) {
+			printf("%ld ", *(jlong*)i);
+			i++;
+		}else if (stack->types[i-stack->begin()] == T_FLOAT) {
+			printf("%f ", *(jfloat*)i);
+		}else if (stack->types[i-stack->begin()] == T_DOUBLE) {
+			printf("%lf ", *(jdouble*)i);
+			i++;
+		}else {
+			printf("%d ", *(jint*)i);
 		}
-		return false;
+	}
+	printf("\n");
+}
+void frame::print_locals()
+{
+	printf("\tlocals= ");
+	for (any_array::iterator i = locals->begin(); i != locals->end(); i++) {
+		printf("%d|", *i);
+	}
+	printf("\n");
+}
+
+jvalue thread::call_native(method * m,operand_stack * args)
+{
+	printf("try to call native method %s\n",vm_native::trans_method_name(m).c_str());
+	vm_native::native_metod fn = m->native_method;
+	if (!fn) {
+		fn = get_env()->get_vm()->vm_native_methods.find_native_implement(m);
+		m->native_method = fn;
+	}
+	if (!fn) {
+		//后面改成抛异常
+		printf("native method %s not found\n",vm_native::trans_method_name(m).c_str());
+		throw std::runtime_error("native method");
+		return 0;
+	}
+	uint32_t arg_count = m->arg_types.size() + 1; //Env指针 暂时丢个thread*给它
+	ffi_type ** arg_types = (ffi_type**)alloca(sizeof(ffi_type)*arg_count);
+	void ** arg_ptrs = (void**)alloca(sizeof(void*)*arg_count);
+	void * ts [] = {
+		&ffi_type_uint8, 
+		&ffi_type_uint16, 
+		&ffi_type_float,
+		&ffi_type_double,
+		&ffi_type_uint8, 
+		&ffi_type_uint16,
+		&ffi_type_sint32,
+		&ffi_type_sint64,
+		&ffi_type_uint32,
+	};
+
+	arg_types[0] = &ffi_type_pointer;
+	arg_ptrs[0] = alloca(arg_types[0]->size);
+	*(environment**)arg_ptrs[0] = get_env();
+
+	int idx = 1;
+	for (auto & t : m->arg_types) {
+		arg_types[idx] = (ffi_type*)ts[t-T_BOOLEAN];
+		arg_ptrs[idx] = alloca(arg_types[idx]->size);
+		if (t == T_BOOLEAN)		*(jboolean*)arg_ptrs[idx] = args->pop<jboolean>();
+		else if (t == T_CHAR)	*(jchar*)arg_ptrs[idx] = args->pop<jchar>();
+		else if (t == T_FLOAT)	*(jfloat*)arg_ptrs[idx] = args->pop<jfloat>();
+		else if (t == T_DOUBLE) *(jdouble*)arg_ptrs[idx] = args->pop<jdouble>();
+		else if (t == T_BYTE)	*(jbyte*)arg_ptrs[idx] = args->pop<jbyte>();
+		else if (t == T_SHORT)	*(jshort*)arg_ptrs[idx] = args->pop<jshort>();
+		else if (t == T_INT)	*(jint*)arg_ptrs[idx] = args->pop<jint>();
+		else if (t == T_LONG)	*(jlong*)arg_ptrs[idx] = args->pop<jlong>();
+		else if (t == T_OBJECT)	*(jreference*)arg_ptrs[idx] = args->pop<jreference>();
+		idx ++;
+	}
+	ffi_type * ret_type = nullptr;
+	if (m->ret_type == T_VOID) {
+		ret_type = &ffi_type_void;
+	}else {
+		ret_type = (ffi_type*)ts[m->ret_type - T_BOOLEAN];
 	}
 
+	ffi_cif cif;
+	ffi_status status = ffi_prep_cif(&cif, FFI_DEFAULT_ABI, arg_count, ret_type, arg_types);
+	jvalue ret;
+	if (status == FFI_OK) {
+		void * ret_ptr = nullptr;
+		if (ret_type->size) {
+			ret_ptr = alloca(ret_type->size);
+		}
+		ffi_call(&cif, fn, ret_ptr, arg_ptrs);
+		if (ret_ptr) {
+			return *(jvalue*)ret_ptr;
+		}
+	}
+	return 0;
+}
+
+jvalue thread::call(method * m, operand_stack * args)
+{
+	if (!m) return 0; 
+	printf("call \e[34m%s.%s\e[0m \e[35m%s\e[0m\n", m->owner->name->c_str(), m->name->c_str(), m->discriptor->c_str());
+	if (!args && current_frame) {
+		args = current_frame->stack;
+	}
+
+	operand_stack * temp_stack = nullptr;
+	if (args) {
+		temp_stack = new operand_stack(args->size());
+		for (int idx = m->arg_types.size()-1; idx >= 0; idx --) {
+			if (m->arg_types[idx] == T_LONG || m->arg_types[idx] == T_DOUBLE)  temp_stack->push(args->pop<jlong>());
+			else temp_stack->push(args->pop<jint>());
+		}
+		printf("with args(");
+		int idx = m->arg_types.size() - 1;
+		for (auto t : m->arg_types) {
+			printf(" %s:", type_text[t-T_BOOLEAN]);
+			printf("%d ", temp_stack->get<jint>(idx));
+			idx--;
+		}
+		printf(")\n");
+	}
+	fflush(stdout);
+
+	jvalue ret = 0;
+	if (m->is_native()) {
+		ret = call_native(m, temp_stack);
+	}else {
+		frame * new_frame = new frame(current_frame, m, this);
+		if (temp_stack) {
+			int idx = 0;
+			for (auto && t : m->arg_types) {
+				if (t == T_LONG || t == T_DOUBLE) { 
+					new_frame->locals->put(temp_stack->pop<jlong>(),idx);
+					idx += 2;
+				}else {
+					new_frame->locals->put(temp_stack->pop<jint>(),idx);
+					idx ++;
+				}
+			}
+		}
+		current_frame = new_frame;
+		current_frame->exec(m->owner->name->c_str(), m->name->c_str());
+		pop_frame();
+	}
+	if (m->ret_type != T_VOID) {
+		if (m->ret_type == T_LONG || m->ret_type  == T_DOUBLE) {
+			current_frame->stack->push(ret.j);
+		}else {
+			current_frame->stack->push(ret.i);
+		}
+	}
+	if (temp_stack) delete temp_stack;
+	return ret;
+}

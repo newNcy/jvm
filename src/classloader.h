@@ -1,5 +1,6 @@
 #pragma once
 #include "class.h"
+#include "thread.h"
 #include <zip.h>
 
 class raw_const_pool;
@@ -8,9 +9,10 @@ class classloader
 	friend class jvm;
 	public:
 		std::string runtime_path;
-		claxx * find_class(const std::string & name);
 		claxx * load_class(const std::string & name, thread * current_thread);
 		claxx * load_class(byte_stream & stream, thread * current_thread);
+		claxx * load_class_from_disc(const std::string & disc, thread * current_thread);
+		array_claxx * create_array_claxx(const std::string & name, thread * current_thread);
 		void load_jar(const std::string & path, thread * current_thread);
 		claxx *  load_from_file(const std::string & file, thread * current_thread);
 		jtype type_of_disc(char c);

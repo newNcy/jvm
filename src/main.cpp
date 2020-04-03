@@ -1,24 +1,14 @@
 #include <cstdio>
+#include <ffi-x86_64.h>
 #include <string>
 #include <vector>
 #include "jvm.h"
 
-
-#define JCALL 
-JCALL void test(int a, int b)
-{
-}
-
-
-typedef void(*call)();
 int main(int argc, char * argv[])
 {
-	if (argc < 2) return 0;
-	const char * main_class_name = argv[1];
+	const char * main_class_name = "Test";
 	std::vector<std::string> args;
-	for (int i = 1; i < argc; i ++) {
-		args.push_back(argv[i]);
-	}
+	args.push_back(main_class_name);
 	
 	jvm vm;
 	vm.load_runtime("rt.jar");

@@ -24,6 +24,9 @@ enum {
 
 	BIPUSH			= 0x10,
 	LDC				= 0x12,
+	
+	DCONST_0		= 0x14,
+	DCONST_1		,
 
 	ILOAD_0			= 0x1a,
 	ILOAD_1			,
@@ -46,7 +49,8 @@ enum {
 	ASTORE_1		= 0x4c,
 	ASTORE_2		= 0x4d,
 	ASTORE_3		= 0x4e,
-
+	AASTORE			= 0x53,
+	CASTORE			= 0x55,
 	POP				= 0x57,
 	POP2			,
 	DUP				= 0x59,
@@ -60,8 +64,10 @@ enum {
 	INVOKEVIRTUAL	= 0xb6,
 	INVOKESPECIAL	= 0xb7,
 	INVOKESTATIC	= 0xb8,
+	INVOKEINTERFACE = 0xb9,
 	NEW				= 0xbb,
 	NEWARRAY		,
+	ANEWARRAY		,
 	ATHROW			= 0xbf,
 	MONITERENTER	= 0xc2,
 	MONITEREXIT		= 0xc3,

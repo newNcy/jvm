@@ -1,5 +1,6 @@
 #pragma once
 
+#include "class.h"
 class claxx;
 
 struct member_operator 
@@ -28,5 +29,6 @@ struct object
 {
 	claxx * meta = nullptr;
 	char * static_data = nullptr;
+	bool is_array() { return meta->is_array(); }
 	char data[];
 };

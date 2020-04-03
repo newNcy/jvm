@@ -2,6 +2,7 @@
 #include "classloader.h"
 #include "memery.h"
 #include "jvm.h"
+#include <sstream>
 
 claxx * const_pool::get_class(u2 idx, thread * current_thread)
 {
@@ -11,7 +12,7 @@ claxx * const_pool::get_class(u2 idx, thread * current_thread)
 	if (!item || item->tag != CONSTANT_Class) return nullptr;
 	class_ref * sym_class = item->sym_class;
 	claxx * ret = owner->loader->load_class(sym_class->name->c_str(), current_thread);
-	if (ret->state < INIT) ret->loader->initialize_class(ret, current_thread);
+	if (ret->state < INITING) ret->loader->initialize_class(ret, current_thread);
 	cache[idx] = ret;
 	return ret;
 }
@@ -54,7 +55,12 @@ field * const_pool::get_field(u2 idx, thread * current_thread)
 	claxx * field_owner = get_class(sym_field->class_index, current_thread);
 	if (!field_owner) return nullptr;
 	field * ret = field_owner->lookup_field(sym_field->name->c_str());
-	if (!ret) ret = field_owner->super_class->lookup_field(sym_field->name->c_str());
+	if (!ret) ret = field_owner->lookup_static_field(sym_field->name->c_str());
+	if (ret->type == T_OBJECT) {
+		if (!ret->meta) {
+			ret->meta = owner->loader->load_class_from_disc(ret->discriptor->c_str(), current_thread);
+		}
+	}
 	cache[idx] = ret;
 	return ret;
 }
@@ -70,7 +76,7 @@ jreference const_pool::get_string(u2 idx, thread * current_thread)
 	claxx * string = owner->loader->load_class("java/lang/String", current_thread);
 	method * string_init = string->lookup_method("<init>","()V");
 	jreference ret = memery::alloc_heap_object(string);
-	current_thread->push_frame(string_init);
+	current_thread->call(string_init);
 	*((jreference*)&cache[idx]) = ret;
 	return ret;
 }
@@ -78,29 +84,73 @@ jreference const_pool::get_string(u2 idx, thread * current_thread)
 
 method * claxx::get_init_method()
 {
-	return lookup_method("<init>", "()V");
+	return lookup_method("<init>", "()V", false);
 }
 
 method * claxx::get_clinit_method()
 {
-	return lookup_method("<clinit>", "()V");
+	return lookup_method("<clinit>", "()V", false);
 }
 
-method * claxx::lookup_method(const std::string & name, const std::string & discriptor)
+method * claxx::lookup_method(const std::string & name, const std::string & discriptor, bool recursive)
 {
 	auto byname = methods.find(name);
-	if (byname == methods.end()) return nullptr;
-	auto bydisc = byname->second.find(discriptor);
-	if (bydisc == byname->second.end()) return nullptr;
-	return bydisc->second;
-}
-
-field *claxx::lookup_field(const std::string & name)
-{
-	auto res = fields.find(name);
-	if (res != fields.end()) return res->second;
-	res = static_fields.find(name);
-	if (res != fields.end()) return res->second;
+	if (byname != methods.end()) {
+		auto bydisc = byname->second.find(discriptor);
+		if (bydisc != byname->second.end()) {
+			return bydisc->second;
+		}
+	}
+	if (recursive && super_class) {
+		return super_class->lookup_method(name, discriptor);
+	}
 	return nullptr;
 }
 
+field * claxx::lookup_field(const std::string & name)
+{
+	auto res = fields.find(name);
+	if (res != fields.end()) return res->second;
+	return nullptr;
+}
+field * claxx::lookup_static_field(const std::string & name)
+{
+	auto res = static_fields.find(name);
+	if (res != static_fields.end()) return res->second;
+	return nullptr;
+}
+
+claxx * claxx::get_array_claxx(thread * current_thread)
+{
+	std::stringstream ss;
+	ss<<"[L";
+	ss<<this->name->c_str()<<";";
+	printf("array %s\n", ss.str().c_str());
+	return this->loader->load_class(ss.str().c_str(), current_thread);
+}
+
+symbol * make_symbol(const std::string & str)
+{
+	symbol * sym = (symbol*)new char[sizeof(symbol) + str.length()]();
+	strcpy((char*)sym->bytes, str.c_str());
+	return sym;
+}
+
+array_claxx::array_claxx(const std::string & binary_name, classloader * ld, thread * current_thread)
+{
+	this->name = make_symbol(binary_name);
+	this->loader = ld;
+	int i = 0;
+	while (i < binary_name.length() && binary_name[i++] == '[') dimensions ++;
+	this->componen_type = ld->type_of_disc(binary_name[i]);
+	if (binary_name[i] == 'L') {
+		this->component = ld->load_class(std::string(binary_name, i, binary_name.length()), current_thread);
+	}
+	field * length = memery::alloc_meta<field>();
+	length->name = make_symbol("length");
+	length->type = T_INT;
+	length->owner = this;
+	length->offset = 0;
+	fields["length"] = length;
+	member_size = 4;
+}

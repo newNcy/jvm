@@ -1,7 +1,11 @@
 #include "interpreter.h"
+#include "class.h"
+#include "memery.h"
 #include "thread.h"
+#include <cstdint>
 #include <iterator>
 #include <string>
+#include "classloader.h"
 
 void debug(const char * f, ...)
 {
@@ -13,10 +17,12 @@ void debug(const char * f, ...)
 	va_end(l);
 }
 
-void frame::exec()
+void frame::exec(const char * class_name, const char * method_name)
 {
+	if (current_method->is_native()) return;
 	while (pc.value()) {
-		debug("[%05d] ", pc.rd);
+		debug("\e[33m[%05d]\e[0m ", pc.rd);
+		u1 current_pc = pc.rd;
 		u1 op = pc.get<u1>();
 		debug("0x%02x ", op);
 		switch (op) {
@@ -24,6 +30,7 @@ void frame::exec()
 				debug("nop\n");
 				break;
 			case ACONST_NULL:
+				debug("aconst_null\n");
 				stack->push<jreference>(0);
 				break;
 			case ICONST_M1:
@@ -42,25 +49,38 @@ void frame::exec()
 			case FCONST_1:
 			case FCONST_2:
 				{
+					debug("fconst %f\n", (jfloat)(op-FCONST_0));
 					stack->push<jfloat>(op - FCONST_0);
 				}
 				break;
 			case BIPUSH:
-				stack->push<jint>(pc.get<u1>());
+					{
+						u1 v = pc.get<u1>();
+						debug("bipush %d\n", v);
+						stack->push<jint>(v);
+					}
 				break;
 			case LDC:
 				{
 					u1 index = pc.get<u1>();
 					const_pool_item * c = current_const_pool->get(index);
 					if (c->tag == CONSTANT_Long || c->tag == CONSTANT_Double) {
-						jlong v = c->value.as_long;
+						jlong v = c->value.j;
 						debug("ldc %d[%ld]\n", index, v);
 						stack->push<jlong>(v);
 					}else {
-						jreference v = c->value.as_reference;
+						jreference v = c->value.l;
 						debug("ldc %d[%d]\n", index, v);
 						stack->push<jreference>(v);
 					}
+				}
+				break;
+			case DCONST_0:
+			case DCONST_1:
+				{
+					jdouble v = op - DCONST_0;
+					debug("dconst %lf\n", v);
+					stack->push(v);
 				}
 				break;
 			case ILOAD_0:
@@ -97,6 +117,22 @@ void frame::exec()
 				debug("astore %d\n", op - ASTORE_0);
 				locals->put<jreference>(stack->pop<jreference>(), op-ASTORE_0);
 				break;
+			case AASTORE:
+				{
+					jint value = stack->pop<jint>();
+					jint index = stack->pop<jint>();
+					jreference arrayref = stack->pop<jreference>();
+					debug("aastore %d[%d] = %d\n", arrayref, index, value);
+				}
+				break;
+			case CASTORE:
+				{
+					jint value = stack->pop<jint>();
+					jint index = stack->pop<jint>();
+					jreference arrayref = stack->pop<jreference>();
+					debug("castore %d[%d] = %d\n", arrayref, index, value);
+				}
+				break;
 			case POP:
 				debug("pop\n");
 				stack->pop<jint>();
@@ -124,6 +160,7 @@ void frame::exec()
 				{
 					jreference a = stack->pop<jreference>();
 					jreference b = stack->pop<jreference>();
+					debug("if_acmpeq %u %u\n", a, b);
 					if (a == b) pc_offset(pc.get<u2>());
 				}
 				break;
@@ -131,6 +168,7 @@ void frame::exec()
 				{
 					jreference a = stack->pop<jreference>();
 					jreference b = stack->pop<jreference>();
+					debug("if_acmpne %u %u\n", a, b);
 					if (a != b) pc_offset(pc.get<u2>());
 				}
 				break;
@@ -138,11 +176,12 @@ void frame::exec()
 				{
 					field * f = current_const_pool->get_field(pc.get<u2>(), current_thread);
 					member_operator members(f->owner->static_members, f->owner->static_size());
-					if (f->type > OBJECT) {
+					if (f->type == T_LONG || f->type == T_DOUBLE) {
 						stack->push(members.get<jlong>(f->offset));
 					}else {
 						stack->push(members.get<jint>(f->offset));
 					}
+					debug("getstatic %s.%s\n", f->owner->name->c_str(), f->name->c_str());
 				}
 				break;
 			case PUTSTATIC:
@@ -150,11 +189,12 @@ void frame::exec()
 					u2 index = pc.get<u2>();
 					field * f = current_const_pool->get_field(index, current_thread);
 					member_operator members(f->owner->static_members, f->owner->static_size());
-					if (f->type > OBJECT) {
+					if (f->type == T_LONG || f->type == T_DOUBLE) {
 						members.put(stack->pop<jlong>(), f->offset);
 					}else {
 						members.put(stack->pop<jint>(), f->offset);
 					}
+					debug("putstatic %s.%s\n", f->owner->name->c_str(), f->name->c_str());
 				}
 				break;
 			case GETFIELD:
@@ -162,30 +202,43 @@ void frame::exec()
 					u2 index = pc.get<u2>();
 					field * f = current_const_pool->get_field(index, current_thread);
 					jreference objref = stack->pop<jreference>();
+					
+					/*
+					 * if (!objref) {
+						claxx * nullexp = current_class->loader->load_class("java/lang/NullPointerException",current_thread);
+						stack->push(memery::alloc_heap_object(nullexp));
+						current_thread->handle_exception();
+						return;
+					}
+					*/
 					object * obj = memery::ref2oop(objref);
 					member_operator members(obj->data, obj->meta->size());
-					if (f->type > OBJECT) {
+					if (f->type == T_LONG || f->type == T_DOUBLE) {
 						stack->push(members.get<jlong>(f->offset));
 					}else {
 						stack->push(members.get<jint>(f->offset));
 					}
+					debug("getfield %s.%s\n on object ref %u\n", f->owner->name->c_str(), f->name->c_str(), objref);
 				}
 				break;
 			case PUTFIELD:
 				{
 
 					u2 index = pc.get<u2>();
-					debug("putfield %d\n",index);
 					field * f = current_const_pool->get_field(index, current_thread);
-					if (f->type > OBJECT) {
+					debug("putfield %s.%s on object ref ", f->owner->name->c_str(), f->name->c_str());
+					jreference objref = 0;
+					if (f->type == T_LONG || f->type == T_DOUBLE) {
 						jlong v = stack->pop<jlong>();
-						jreference objref = stack->pop<jreference>();
+						objref = stack->pop<jreference>();
+						debug("%d\n",objref);
 						object * obj = memery::ref2oop(objref);
 						member_operator members(obj->data, obj->meta->size());
 						members.put(v, f->offset);
 					}else {
 						jint v = stack->pop<jint>();
-						jreference objref = stack->pop<jreference>();
+						objref = stack->pop<jreference>();
+						debug("%d\n",objref);
 						object * obj = memery::ref2oop(objref);
 						member_operator members(obj->data, obj->meta->size());
 						members.put(v, f->offset);
@@ -197,14 +250,27 @@ void frame::exec()
 			case INVOKESTATIC:
 				{
 					const char * msg []  = {"virtual", "special", "static"};
-					debug("invoke%s\n", msg[op-INVOKEVIRTUAL]);
 					method * to_call = current_const_pool->get_method(pc.get<u2>(), current_thread);
-					if (to_call) current_thread->push_frame(to_call);
+					debug("invoke%s %s.%s\n", msg[op-INVOKEVIRTUAL],to_call->owner->name->c_str(),  to_call->name->c_str());
+					if (to_call) {
+						current_thread->call(to_call);
+					}
+				}
+				break;
+			case INVOKEINTERFACE:
+				{
+					u2 index = pc.get<u2>();
+					u1 count = pc.get<u1>();
+					u1 zero = pc.get<u1>();
+					method * interface_method = current_const_pool->get_method(index, current_thread);
+					debug("invokeinterface [%d|%d|%d]\n", index, count, zero);
+					current_thread->call(interface_method);
 				}
 				break;
 			case NEW:
 				{
 					claxx * meta = current_const_pool->get_class(pc.get<u2>(), current_thread);
+					debug("new %s\n", meta->name->c_str());
 					stack->push(memery::alloc_heap_object(meta));
 				}
 				break;
@@ -212,7 +278,22 @@ void frame::exec()
 				{
 					u1 type = pc.get<u1>();
 					if (4 <= type && type <= 11) {
+						const char * name[] = {"boolean", "char", "float", "double", "byte", "short", "int", "long", "object" };
+						debug("newarray of %s length: %d\n", name[type-T_BOOLEAN], stack->pop<jint>());
 					}
+					stack->push(128);
+				}
+				break;
+			case ANEWARRAY:
+				{
+					claxx * c = current_const_pool->get_class(pc.get<u2>(), current_thread);
+					jint length = stack->pop<jint>();
+					if (!c) {
+						break;
+					}
+					claxx * ca = c->get_array_claxx(current_thread);
+					stack->push(memery::alloc_heap_array(ca, length));
+					debug("anewarray of %s\n", ca->name->c_str());
 				}
 				break;
 			case ATHROW:
@@ -224,11 +305,13 @@ void frame::exec()
 			case MONITERENTER:
 				{
 					debug("monitor enter\n");
+					stack->pop<jreference>();
 				}
 				break;
 			case MONITEREXIT:
 				{
 					debug("monitor exit\n");
+					stack->pop<jreference>();
 				}
 				break;
 			case IFNULL:
@@ -237,8 +320,9 @@ void frame::exec()
 			case IFNONNULL:
 				{
 					jreference ref = stack->pop<jreference>();
-					debug("ifnonnull %d\n", ref);
-					if (ref) pc_offset(pc.get<u2>());
+					jshort offset = pc.get<u2>();
+					debug("ifnonnull %d goto %d\n", ref, current_pc + offset);
+					if (ref) pc_offset(offset);
 				}
 				break;
 			default:
@@ -246,11 +330,9 @@ void frame::exec()
 				fflush(stdout);
 				abort();
 		}
-		any_array * l = locals;
-		for (int i = 0 ; i < l->N; i ++) {
-			printf("%d ",l->data[i]);
-		}
-		printf("\n");
+		print_stack();
+		print_locals();
 	}
+	debug("[%s.%s] exited\n", current_class->name->c_str(), current_method->name->c_str());
 }
 

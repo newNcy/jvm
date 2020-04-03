@@ -3,10 +3,10 @@
 #include <typeinfo>
 #include "class.h"
 #include "object.h"
-#include "classloader.h"
 const static uint64_t K = 1024;
 const static uint64_t M = 1024*K;
 const static uint64_t G = 1024*M;
+const jreference null = 0;
 
 
 class memery
@@ -39,7 +39,7 @@ class memery
 	static std::map<jreference, object*> ref_oop_map;
 	static object * ref2oop(jreference ref);
 	static jreference alloc_heap_object(claxx * meta);
-	static jreference alloc_heap_array(array_claxx * meta, size_t length);
+	static jreference alloc_heap_array(claxx * meta, size_t length);
 	static char * alloc_static_members(claxx * meta);
 };
 

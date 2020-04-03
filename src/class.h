@@ -25,32 +25,67 @@ typedef uint32_t jreference;
 
 enum jtype 
 {
-	VOID,
-	BOOLEAN = 4,
-	CHAR,
-	FLOAT,
-	DOUBLE,
-	BYTE,
-	SHORT,
-	INT,
-	LONG, 
-	OBJECT,
+	T_VOID,
+	T_BOOLEAN = 4,
+	T_CHAR,
+	T_FLOAT,
+	T_DOUBLE,
+	T_BYTE,
+	T_SHORT,
+	T_INT,
+	T_LONG, 
+	T_OBJECT,
 };
 
 union jvalue
 {
-	jboolean	as_boolean;
-	jbyte		as_byte;
-	jchar		as_char;
-	jshort		as_short;
-	jint		as_int;
-	jfloat		as_float;
-	jlong		as_long;
-	jdouble		as_double;
-	jreference	as_reference;
+	jboolean	z;
+	jbyte		b;
+	jchar		c;
+	jshort		s;
+	jint		i;
+	jfloat		f;
+	jlong		j;
+	jdouble		d;
+	jreference	l;
+	jvalue() {}
+	jvalue(jboolean v):		z(v) {}
+	jvalue(jbyte v):		b(v) {}
+	jvalue(jchar v):		c(v) {}
+	jvalue(jshort v):		s(v) {}
+	jvalue(jint v):			i(v) {}
+	jvalue(jfloat v):		f(v) {}
+	jvalue(jlong v):		j(v) {}
+	jvalue(jdouble v):		d(v) {}
+	jvalue(jreference v):	l(v) {}
 };
 
+template <jtype T> struct jtype_traits;
+template <> struct jtype_traits<T_BOOLEAN>	{ using type = jboolean; };
+template <> struct jtype_traits<T_CHAR>		{ using type = jchar; };
+template <> struct jtype_traits<T_FLOAT>	{ using type = jfloat; };
+template <> struct jtype_traits<T_DOUBLE>	{ using type = jdouble; };
+template <> struct jtype_traits<T_BYTE>		{ using type = jbyte; };
+template <> struct jtype_traits<T_SHORT>	{ using type = jshort; };
+template <> struct jtype_traits<T_INT>		{ using type = jint; };
+template <> struct jtype_traits<T_LONG>		{ using type = jlong; };
+template <> struct jtype_traits<T_OBJECT>	{ using type = jreference; };
 
+
+template <typename T> struct jtype_value_traits		{ enum { type_value = T_VOID};};
+
+template <> struct jtype_value_traits<jboolean>		{ enum { type_value = T_VOID};};
+template <> struct jtype_value_traits<jchar>		{ enum { type_value = T_CHAR};};	
+template <> struct jtype_value_traits<jfloat>		{ enum { type_value = T_FLOAT};};
+template <> struct jtype_value_traits<jdouble>		{ enum { type_value = T_DOUBLE};};
+template <> struct jtype_value_traits<jbyte>		{ enum { type_value = T_BYTE};};
+template <> struct jtype_value_traits<jshort>		{ enum { type_value = T_SHORT};};
+template <> struct jtype_value_traits<jint>			{ enum { type_value = T_INT};};
+template <> struct jtype_value_traits<jlong>		{ enum { type_value = T_LONG};};
+template <> struct jtype_value_traits<jreference>	{ enum { type_value = T_OBJECT};};
+
+const static uint32_t type_size[] = {1, 2, 4, 8, 1, 2, 4, 8,4};
+const static char * type_text[] = {"boolean", "char", "float", "double", "byte", "short", "int", "long", "objet"};
 
 struct symbol_ref 
 {
@@ -105,8 +140,8 @@ struct const_pool_item
 		method_type_ref *		sym_method_type			;
 		invoke_dynamic_ref *	sym_invoke_dynamic		;
 		symbol *				utf8_str				;
-		jvalue value;
 	};
+	jvalue value;
 };
 
 
@@ -145,12 +180,14 @@ struct field : public name_and_type_meta
 	bool is_field() { return true; }
 	int offset = -1;
 	jtype type;
+	claxx * meta = nullptr; 
 };
 struct method : public name_and_type_meta 
 {
 	bool is_method() { return true; }
 	std::vector<jtype> arg_types;
 	jtype  ret_type;
+	void (*native_method)() = nullptr;
 };
 
 struct const_pool
@@ -196,15 +233,17 @@ enum class_state
 {
 	CREATE,
 	LOAD,
-	LINK,
-	INIT
+	LINKING,
+	LINKED,
+	INITING,
+	INITED
 };
 
-
+struct array_claxx;
 struct claxx : public class_ref, meta_base 
 {
 	class_state state = CREATE;
-	claxx * super_class;
+	claxx * super_class = nullptr;
 	classloader * loader = nullptr;
 	std::vector<claxx*> interfaces;
 	std::map<std::string,std::map<std::string, method *> > methods;
@@ -219,17 +258,24 @@ struct claxx : public class_ref, meta_base
 
 	bool is_class() { return true; }
 	size_t static_size() { return static_member_size; }
-	size_t size() const { return member_size;}
+	size_t size() const { return sizeof(claxx) + member_size;}
+	virtual size_t size(int length) const { return 0;};
 	method * get_init_method();
 	method * get_clinit_method();
-	method * lookup_method(const std::string & name, const std::string & discriptor);
+	method * lookup_method(const std::string & name, const std::string & discriptor, bool recursive = true);
 	field * lookup_field(const std::string & name);
+	field * lookup_static_field(const std::string & name);
+	claxx * get_array_claxx(thread *);
 };
 
 struct array_claxx : public claxx
 {
-	bool is_array() { return true; }
-	claxx * component = nullptr;
+	bool is_array() override { return true; }
+	size_t size(int length) const override { return claxx::size() + length*type_size[componen_type-T_BOOLEAN];}
+	uint32_t dimensions = 0;
+	array_claxx(const std::string & binary_name, classloader * ld, thread * current_thread);
 	jtype componen_type;
+	claxx * component = nullptr;
 };
 
+symbol * make_symbol(const std::string & str);

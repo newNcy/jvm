@@ -1,7 +1,9 @@
 #include "classloader.h"
+#include "class.h"
 #include "memery.h"
 #include <cstring>
 #include <cstdio>
+#include <stdexcept>
 #include <zip.h>
 #include <malloc.h>
 #include <sys/stat.h>
@@ -9,6 +11,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include "jvm.h"
+#include "thread.h"
 
 class raw_const_pool 
 {
@@ -32,6 +35,7 @@ class raw_const_pool
 	const_pool_item * parse_entry(int index) 
 	{
 		if (!rt_pool) return nullptr;
+		if (!index) return nullptr;
 		if (rt_pool->get(index)) return rt_pool->get(index);
 		cp_info * info = raw_pool[index];
 		if (!info) return nullptr;
@@ -65,31 +69,31 @@ class raw_const_pool
 				{
 					//暂时不创建string
 					cp_utf8 * utf8 = get<symbol>(((cp_string*)info)->string_index);
-					ret->value.as_reference = current_thread->create_string(utf8->c_str());
+					ret->value.l = current_thread->create_string(utf8->c_str());
 				}
 				break;
 			case CONSTANT_Integer:
 				{
 					cp_int * num = (cp_int*)info;
-					ret->value.as_int = *(jint*)&(num->bytes);
+					ret->value.i = *(jint*)&(num->bytes);
 				}
 				break;
 			case CONSTANT_Float:
 				{
 					cp_float * num = (cp_float*)info;
-					ret->value.as_float = *(jfloat*)&(num->bytes);
+					ret->value.f = *(jfloat*)&(num->bytes);
 				}
 				break;
 			case CONSTANT_Long:
 				{
 					cp_long * num = (cp_long*)info;
-					ret->value.as_long = num->bytes;
+					ret->value.j = num->bytes;
 				}
 				break;
 			case CONSTANT_Double:
 				{
 					cp_double * num = (cp_double*)info;
-					ret->value.as_double = *(jdouble*)&num->bytes;
+					ret->value.d = *(jdouble*)&num->bytes;
 				}
 				break;
 			case CONSTANT_NameAndType:
@@ -210,15 +214,16 @@ claxx * classloader::load_from_file(const std::string & file, thread * current_t
 	stream.set_buf(buf, info.st_size);
 	return load_class(stream, current_thread);
 }
-claxx * classloader::find_class(const std::string & name)
-{
-	auto it = loaded_classes.find(name);
-	if (it != loaded_classes.end()) return it->second;
-	return nullptr;
-}
 claxx * classloader::load_class(const std::string & name, thread * current_thread)
 {
+	if (!name.length()) return nullptr;
 	if (loaded_classes.find(name) != loaded_classes.end()) return loaded_classes[name];
+	if (name[0] == '[') {
+		claxx * ret = create_array_claxx(name, current_thread);
+		if (ret) {
+			return loaded_classes[name] = ret;
+		}
+	}
 	std::string file_name = name + ".class";
 	claxx * ret = load_from_file(file_name, current_thread);
 	if (ret) return ret;
@@ -234,14 +239,14 @@ claxx * classloader::load_class(const std::string & name, thread * current_threa
 
 	struct zip_stat stat;
 	if (zip_stat(rt_jar, file_name.c_str(), ZIP_FL_UNCHANGED, &stat) != 0) {
-		zip_close(rt_jar);
+		//zip_close(rt_jar);
 		return nullptr;
 	}
 	char * buf = new char[stat.size];
 	zip_file * class_file = zip_fopen(rt_jar,file_name.c_str(), ZIP_FL_UNCHANGED);
 	if (!class_file) {
 		delete [] buf;
-		zip_close(rt_jar);
+		//zip_close(rt_jar);
 		return nullptr;
 	}
 
@@ -252,6 +257,9 @@ claxx * classloader::load_class(const std::string & name, thread * current_threa
 	zip_fclose(class_file);
 	ret = load_class(stream, current_thread);
 	delete [] buf;
+	if (!ret) {
+		throw std::runtime_error("classfile not found");
+	}
 	return ret;
 }
 
@@ -288,6 +296,7 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 	java_class->access_flag = stream.get<u2>();
 	java_class->name = java_class->cpool->get(stream.get<u2>())->sym_class->name;
 	u2 super_index = stream.get<u2>();
+	//printf("super %d\n", super_index);
 	if (super_index) 
 		java_class->super_class = java_class->cpool->get_class(super_index, current_thread);
 	u2 interfece_count = stream.get<u2>();
@@ -296,6 +305,13 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 		java_class->interfaces.push_back(java_class->cpool->get_class(interface_index, current_thread));
 	}
 	u2 field_count = stream.get<u2>();
+
+	//先把父类属性放进来,不知道对不对，但是肯定可以,owner怎么置，或者复制一个？,不用了生成了
+	/*if (java_class->super_class) {
+		for (auto f : java_class->super_class->fields) {
+		}
+	}
+	*/
 	int mem_off = 0;
 	int static_off = 0;
 	for (int i = 0; i < field_count; i++) {
@@ -304,7 +320,7 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 		f->access_flag = stream.get<u2>();
 		f->name = raw_pool.get<symbol>( stream.get<u2>());
 		f->discriptor = raw_pool.get<symbol>( stream.get<u2>());
-		f->type = type_of_disc(f->name->at(0));
+		f->type = type_of_disc(f->discriptor->at(0));
 		//printf("field %s:%s\n", f->name->c_str(), f->discriptor->c_str());
 		u2 attr_count = stream.get<u2>();
 		while (attr_count --) {
@@ -322,8 +338,7 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 			java_class->fields[f->name->c_str()] = f;
 		}
 		f->offset = off;
-		if (f->type > OBJECT) off += 4;
-		off += 4;
+		off += type_size[f->type];
 	}
 	java_class->member_size = mem_off;
 	java_class->static_member_size = static_off;
@@ -336,10 +351,10 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 		m->access_flag = stream.get<u2>();
 		m->name = raw_pool.get<symbol>(stream.get<u2>());
 		m->discriptor = raw_pool.get<symbol>(stream.get<u2>());
-		if (!m->is_static()) m->arg_types.push_back(INT);
+		if (!m->is_static()) m->arg_types.push_back(T_OBJECT); //this
 		m->ret_type = type_of_method_disc(m->discriptor, m->arg_types);
 
-		//printf("method native:%d %s:%s\n", m->is_native(), m->name->c_str(), m->discriptor->c_str());
+		//printf("method native:%d %s:%s arg count %ld\n", m->is_native(), m->name->c_str(), m->discriptor->c_str(), m->arg_types.size());
 		u2 attr_count = stream.get<u2>();
 		while (attr_count --) {
 			attribute * attr = parse_attribute(stream, raw_pool);
@@ -362,8 +377,8 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 			memery::dealloc_meta(info);
 		}
 	}
-	java_class->state = LINK;
-	printf("loaded %s\n", java_class->name->c_str());
+	java_class->state = LINKED;
+	//printf("loaded %s\n", java_class->name->c_str());
 	loaded_classes[java_class->name->c_str()] = java_class;
 	return java_class;
 }
@@ -613,7 +628,7 @@ attribute * classloader::parse_attribute(byte_stream & stream,const raw_const_po
 					frame.locals.push_back( parse_verification_type_info( stream));
 				}
 			}else if (frame_type == 255){
-				frame.frame_type == FULL_FRAME;
+				frame.frame_type = FULL_FRAME;
 				frame.offset_delta = stream.get<u2>();	
 				u2 nlocals = stream.get<u2>();
 				while (nlocals --) {
@@ -795,28 +810,35 @@ jtype classloader::type_of_disc(char c)
 {
 	switch (c) {
 		case 'B':
-			return BYTE;
+			return T_BYTE;
 		case 'C':
-			return CHAR;
+			return T_CHAR;
 		case 'S': 
-			return SHORT;
+			return T_SHORT;
 		case 'Z':
-			return BOOLEAN;
+			return T_BOOLEAN;
 		case 'V':
-			return VOID;
+			return T_VOID;
 		case 'F':
-			return FLOAT;
+			return T_FLOAT;
 		case 'J':
-			return LONG;
+			return T_LONG;
 		case 'D':
-			return DOUBLE;
+			return T_DOUBLE;
 		case 'L':
-			return OBJECT;
+			return T_OBJECT;
 		case '[':
-			return OBJECT;
+			return T_OBJECT;
 		default:
-			return INT;
+			return T_INT;
 	}
+}
+
+
+claxx * classloader::load_class_from_disc(const std::string & disc, thread * current_thread)
+{
+	if (disc.length() < 3) return nullptr;
+	return load_class(std::string(disc, 1, disc.length() - 2), current_thread);
 }
 
 jtype classloader::type_of_method_disc(symbol * dis,std::vector<jtype> & args)
@@ -831,18 +853,13 @@ jtype classloader::type_of_method_disc(symbol * dis,std::vector<jtype> & args)
 		args.push_back(type_of_disc(dis->at(i)));
 		if (dis->at(i) == 'L'){
 			while (dis->at(i) != ';') i++;
-			i ++;
+			continue;
 		}
 		if (dis->at(i) == '['){
-			int depth = 1;
 			i ++;
-			while (depth) {
-				if (dis->at(i) == '[') depth ++, i++;
-				if (dis->at(i) == 'L') {
-					while (dis->at(i) != ';') i++;
-				}
-				i ++;
-				depth --;
+			while (dis->at(i) == '[') i ++;
+			if (dis->at(i) == 'L') {
+				while (dis->at(i) != ';') i++;
 			}
 		}
 		
@@ -858,9 +875,20 @@ void classloader::link_class(claxx * to_link)
 void classloader::initialize_class(claxx * to_init, thread * current_thread)
 {
 	if (!to_init || !current_thread) return;
-	if (!to_init->is_class() || to_init->state == INIT) return;
+	if (!to_init->is_class() || to_init->state >= INITING) return;
+	to_init->state = INITING;
 	to_init->static_members = memery::alloc_static_members(to_init);
 	method * clinit = to_init->get_clinit_method();
-	current_thread->push_frame(clinit);
-	to_init->state = INIT;
+	if (clinit) {
+		current_thread->call(clinit);
+	}
+	to_init->state = INITED;
+}
+
+array_claxx * classloader::create_array_claxx(const std::string & name, thread * current_thread)
+{
+	if (name[0] != '[') return nullptr;
+	if (name.length() < 2) return nullptr;
+	array_claxx * ret = new array_claxx(name, this, current_thread);
+	return  ret;
 }
