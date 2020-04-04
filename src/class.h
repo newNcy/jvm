@@ -84,7 +84,8 @@ template <> struct jtype_value_traits<jint>			{ enum { type_value = T_INT};};
 template <> struct jtype_value_traits<jlong>		{ enum { type_value = T_LONG};};
 template <> struct jtype_value_traits<jreference>	{ enum { type_value = T_OBJECT};};
 
-const static uint32_t type_size[] = {1, 2, 4, 8, 1, 2, 4, 8,4};
+const static uint32_t type_size[] = {1, 2, 4, 8, 1, 2, 4, 8, 4};
+const static char type_disc[] = {'z', 'c', 'f', 'd', 'b', 's', 'i', 'j', /* x */'@'};
 const static char * type_text[] = {"boolean", "char", "float", "double", "byte", "short", "int", "long", "objet"};
 
 struct symbol_ref 
@@ -240,6 +241,7 @@ enum class_state
 };
 
 struct array_claxx;
+
 struct claxx : public class_ref, meta_base 
 {
 	class_state state = CREATE;
@@ -251,14 +253,14 @@ struct claxx : public class_ref, meta_base
 	std::map<std::string,field*> static_fields;
 	const_pool * cpool = nullptr;
 
-	char * static_members = nullptr;
 	size_t static_member_size = 0;
 	size_t member_size = 0;
 	jreference mirror = 0;
+	jreference static_obj = 0; //暂时这么存放静态数据
 
 	bool is_class() { return true; }
 	size_t static_size() { return static_member_size; }
-	size_t size() const { return sizeof(claxx) + member_size;}
+	size_t size() const { return member_size;}
 	virtual size_t size(int length) const { return 0;};
 	method * get_init_method();
 	method * get_clinit_method();

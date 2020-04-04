@@ -4,15 +4,17 @@
 #include "object.h"
 
 std::map<jreference, object*> memery::ref_oop_map;
-jreference memery::alloc_heap_object(claxx * meta)
+jreference memery::alloc_heap_object(claxx * meta, bool is_static)
 {
 	if (!meta) return null;
 	jreference ref = ref_oop_map.size() + 1;
-	object * oop = (object*)new char[sizeof(object) + meta->size()]();
-	new (oop) object;
+	uint32_t size = sizeof(object) + (is_static ? meta->static_member_size : meta->size());
+	object * oop = (object*)new char[size]();
+	new (oop) object(size);
 	oop->meta = meta;
 	ref_oop_map[ref] = oop;
-	printf("\e[32mcreate instanse of %s ref:%d\n\e[0m", meta->name->c_str(), ref);
+	if (is_static) meta->static_obj = ref;
+	printf("\e[32mcreate instanse of %s ref:%d [%d] bytes\e[0m\n", meta->name->c_str(), ref, size);
 	return ref;
 }
 
@@ -20,9 +22,10 @@ jreference memery::alloc_heap_array(claxx * meta, size_t length)
 {
 	if (!meta || !meta->is_array()) return null;
 	jreference ref = ref_oop_map.size() + 1;
-	object * oop = (object*)new char[meta->size(length)]();
-	new (oop) object;
-	printf("\e[32mcreate instanse of %s ref:%d\n\e[0m", meta->name->c_str(), ref);
+	uint32_t size = sizeof(object) + meta->size();
+	object * oop = (object*)new char[size]();
+	new (oop) object(size, length);
+	printf("\e[32mcreate instanse of %s ref:%d length:%ld [%d] bytes\e[0m\n", meta->name->c_str(), ref, length, size);
 	ref_oop_map[ref] = oop;
 	return ref;
 }
@@ -34,8 +37,3 @@ object * memery::ref2oop(jreference ref)
 	return res->second;
 }
 
-char * memery::alloc_static_members(claxx * meta)
-{
-	if (!meta || !meta->static_size()) return new char[1];
-	return new char[meta->static_size()]();
-}

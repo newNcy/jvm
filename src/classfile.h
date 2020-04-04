@@ -128,29 +128,29 @@ class byte_stream
 		char * buf = nullptr;
 		bool is_ref = false;
 		int max = 0;
+		int position = 0;
 	public:
 		void set_buf(const char * buff, int length)
 		{
 			buf = const_cast<char*>(buff);
-			rd = 0;
+			position = 0;
 			max = length-1;
 		}
-		int rd = 0;
-		int value() const { return max - rd; }
-
-
+		int pos(int p = -1) { return p == -1 ? position : position = p; }
+		void pos_offset(int off) { position += off; }
+		int value() const { return max > position ? max - position : 0; }
 		template <typename T>
 		T get();
 
 		int read(u1 * out, size_t size)
 		{
 			if (!out) {
-				rd += size;
+				position += size;
 				return 0;
 			}
 			if (size > 0 && value() >= size) {
-				memcpy(out, buf + rd, size);
-				rd += size;
+				memcpy(out, buf + position, size);
+				position += size;
 				return size;
 			}else {
 				return 0;
@@ -168,7 +168,7 @@ T byte_stream::get()
 	if (value() < sizeof(T)) return 0;
 	T t = 0;
 	for (int i = sizeof(T) ; i > 0; i --) {
-		t |= (buf[rd++]&0xff)<<((i-1)*8);
+		t |= (buf[position++]&0xff)<<((i-1)*8);
 	}
 	return t;
 }

@@ -2,6 +2,7 @@
 #include "classloader.h"
 #include "memery.h"
 #include "jvm.h"
+#include "thread.h"
 #include <sstream>
 
 claxx * const_pool::get_class(u2 idx, thread * current_thread)
@@ -73,10 +74,7 @@ jreference const_pool::get_string(u2 idx, thread * current_thread)
 	}
 	const_pool_item * item = get(idx);
 	if (!item || item->tag != CONSTANT_String) return 0;
-	claxx * string = owner->loader->load_class("java/lang/String", current_thread);
-	method * string_init = string->lookup_method("<init>","()V");
-	jreference ret = memery::alloc_heap_object(string);
-	current_thread->call(string_init);
+	jreference ret = current_thread->get_env()->create_string(item->utf8_str->c_str());
 	*((jreference*)&cache[idx]) = ret;
 	return ret;
 }
@@ -146,11 +144,4 @@ array_claxx::array_claxx(const std::string & binary_name, classloader * ld, thre
 	if (binary_name[i] == 'L') {
 		this->component = ld->load_class(std::string(binary_name, i, binary_name.length()), current_thread);
 	}
-	field * length = memery::alloc_meta<field>();
-	length->name = make_symbol("length");
-	length->type = T_INT;
-	length->owner = this;
-	length->offset = 0;
-	fields["length"] = length;
-	member_size = 4;
 }

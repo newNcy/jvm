@@ -4,7 +4,10 @@
 #include "classfile.h"
 #include "interpreter.h"
 #include "jvm.h"
+#include "memery.h"
 #include "native.h"
+#include "object.h"
+#include "classloader.h"
 
 #include <alloca.h>
 #include <cstdint>
@@ -20,7 +23,9 @@ frame::frame(frame * caller, method * to_call, thread * context ):caller_frame(c
 	current_const_pool = current_class->cpool;
 
 	auto code_it = current_method->attributes.find("Code");
-	if (code_it == current_method->attributes.end()) return;
+	if (code_it == current_method->attributes.end()) {
+		return;
+	}
 	code = (code_attr*)code_it->second;
 	
 	pc.set_buf((const char*)code->code, code->code_length);
@@ -105,9 +110,9 @@ bool thread::handle_exception()
 	object * obj = memery::ref2oop(e);
 	for (;current_frame;) {
 		for (exception & e : current_frame->code->exceptions) {
-			u2 cur_pc = current_frame->pc.rd;
+			u2 cur_pc = current_frame->pc.pos();
 			if (e.start_pc <= cur_pc && cur_pc <= e.end_pc) {
-				current_frame->pc.rd = e.handler_pc;
+				current_frame->pc.pos( e.handler_pc);
 				printf("%s handle by %s.%s:%s\n", obj->meta->name->c_str(), 
 						current_frame->current_class->name->c_str(), 
 						current_frame->current_method->name->c_str(), 
@@ -129,25 +134,27 @@ bool thread::handle_exception()
 
 void frame::print_stack() 
 {
-	printf("\tstack(%d) [",stack->size());
+	printf("stack\t[%d] ",stack->size());
+	if (stack->begin() != stack->end()) printf("|");
 	for (any_array::iterator i = stack->begin(); i != stack->end(); i++) {
 		if (stack->types[i-stack->begin()] == T_LONG) {
-			printf("%ld ", *(jlong*)i);
+			printf("%ld|", *(jlong*)i);
 			i++;
 		}else if (stack->types[i-stack->begin()] == T_FLOAT) {
-			printf("%f ", *(jfloat*)i);
+			printf("%f|", *(jfloat*)i);
 		}else if (stack->types[i-stack->begin()] == T_DOUBLE) {
-			printf("%lf ", *(jdouble*)i);
+			printf("%lf|", *(jdouble*)i);
 			i++;
 		}else {
-			printf("%d ", *(jint*)i);
+			printf("%d|", *(jint*)i);
 		}
 	}
 	printf("\n");
 }
 void frame::print_locals()
 {
-	printf("\tlocals= ");
+	printf("locals\t[%d] ", locals->size());
+	if (locals->begin() != locals->end()) printf("|");
 	for (any_array::iterator i = locals->begin(); i != locals->end(); i++) {
 		printf("%d|", *i);
 	}
@@ -225,13 +232,15 @@ jvalue thread::call_native(method * m,operand_stack * args)
 	return 0;
 }
 
-jvalue thread::call(method * m, operand_stack * args)
+
+
+jvalue thread::call(method * m, operand_stack * args, bool is_interface)
 {
 	if (!m) return 0; 
-	printf("call \e[34m%s.%s\e[0m \e[35m%s\e[0m\n", m->owner->name->c_str(), m->name->c_str(), m->discriptor->c_str());
 	if (!args && current_frame) {
 		args = current_frame->stack;
 	}
+
 
 	operand_stack * temp_stack = nullptr;
 	if (args) {
@@ -255,6 +264,13 @@ jvalue thread::call(method * m, operand_stack * args)
 	if (m->is_native()) {
 		ret = call_native(m, temp_stack);
 	}else {
+		//interface_method 
+		if (is_interface) {
+			jreference objref = current_frame->locals->get<jreference>(0);
+			object * oop = memery::ref2oop(objref);
+			m = oop->meta->lookup_method(m->name->c_str(), m->discriptor->c_str());
+		}
+		printf("call \e[34m%s.%s\e[0m \e[35m%s\e[0m\n", m->owner->name->c_str(), m->name->c_str(), m->discriptor->c_str());
 		frame * new_frame = new frame(current_frame, m, this);
 		if (temp_stack) {
 			int idx = 0;
@@ -275,10 +291,17 @@ jvalue thread::call(method * m, operand_stack * args)
 	if (m->ret_type != T_VOID) {
 		if (m->ret_type == T_LONG || m->ret_type  == T_DOUBLE) {
 			current_frame->stack->push(ret.j);
+			printf("\e[34mreturn %ld\n", current_frame->stack->top<jlong>());
 		}else {
 			current_frame->stack->push(ret.i);
+			printf("\e[34mreturn %d\e[0m\n", current_frame->stack->top<jint>());
 		}
 	}
 	if (temp_stack) delete temp_stack;
 	return ret;
+}
+	
+jreference thread::create_string(const std::string & bytes)
+{
+	return get_env()->create_string(bytes);
 }

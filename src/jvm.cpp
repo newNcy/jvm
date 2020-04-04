@@ -51,6 +51,7 @@ void jvm::init_baisc_type()
 }
 void jvm::init(thread * current_thread)
 {
+	claxx * string_class = cloader->load_class("java/lang/String", current_thread);
 	claxx * system_class = cloader->load_class("java/lang/System", current_thread);
 	method * init_system_class = system_class->lookup_method("initializeSystemClass", "()V");
 	if (!init_system_class) return;

@@ -1,6 +1,8 @@
 #include "interpreter.h"
 #include "class.h"
+#include "classfile.h"
 #include "memery.h"
+#include "object.h"
 #include "thread.h"
 #include <cstdint>
 #include <iterator>
@@ -15,14 +17,16 @@ void debug(const char * f, ...)
 	vsprintf(buff, f, l);
 	printf("%s", buff);
 	va_end(l);
+	fflush(stdout);
 }
 
 void frame::exec(const char * class_name, const char * method_name)
 {
 	if (current_method->is_native()) return;
+	debug("codelength[%d]\n", pc.value());
 	while (pc.value()) {
-		debug("\e[33m[%05d]\e[0m ", pc.rd);
-		u1 current_pc = pc.rd;
+		debug("\e[33m[%05d]\e[0m ", pc.pos());
+		u1 current_pc = pc.pos();
 		u1 op = pc.get<u1>();
 		debug("0x%02x ", op);
 		switch (op) {
@@ -64,12 +68,20 @@ void frame::exec(const char * class_name, const char * method_name)
 				{
 					u1 index = pc.get<u1>();
 					const_pool_item * c = current_const_pool->get(index);
+					debug("current_class %s %d\n", current_class->name->c_str(), c->tag);
+					if (c->tag == CONSTANT_Class ) {
+						stack->push(current_const_pool->get_class(index, current_thread)->static_obj);
+						break;
+					}
 					if (c->tag == CONSTANT_Long || c->tag == CONSTANT_Double) {
 						jlong v = c->value.j;
-						debug("ldc %d[%ld]\n", index, v);
+						debug("ldc2 %d[%ld]\n", index, v);
 						stack->push<jlong>(v);
+					} else if (c->tag == CONSTANT_String) {
+						stack->push<jreference>(current_const_pool->get_string(index, current_thread));
+						debug("ldc string at %d\n", index);
 					}else {
-						jreference v = c->value.l;
+						jreference v = c->value.i;
 						debug("ldc %d[%d]\n", index, v);
 						stack->push<jreference>(v);
 					}
@@ -92,6 +104,13 @@ void frame::exec(const char * class_name, const char * method_name)
 					stack->push(locals->get<jint>(op-ILOAD_0));
 				}
 				break;
+			case ALOAD:	
+				{
+					u1 index = pc.get<u1>();
+					debug("aload %d\n", index);
+					stack->push<jreference>(locals->get<jreference>(index));
+				}
+				break;
 			case ALOAD_0:
 			case ALOAD_1:
 			case ALOAD_2:
@@ -102,6 +121,10 @@ void frame::exec(const char * class_name, const char * method_name)
 			case LSTORE:
 				locals->put(stack->pop<jlong>(),pc.get<u1>());
 				debug("lstore\n");
+				break;
+			case ASTORE:
+				locals->put(stack->pop<jreference>(), pc.get<u1>());
+				debug("astore\n");
 				break;
 			case ISTORE_0:
 			case ISTORE_1:
@@ -172,14 +195,22 @@ void frame::exec(const char * class_name, const char * method_name)
 					if (a != b) pc_offset(pc.get<u2>());
 				}
 				break;
+			case GOTO:
+				{
+					u2 offset = pc.get<u2>();
+					pc_offset(offset);
+					debug("goto %d\n", offset);
+				}
+				break;
 			case GETSTATIC: 
 				{
 					field * f = current_const_pool->get_field(pc.get<u2>(), current_thread);
-					member_operator members(f->owner->static_members, f->owner->static_size());
+					object * oop = memery::ref2oop(f->owner->static_obj);
+					jvalue v = oop->get_field(f);
 					if (f->type == T_LONG || f->type == T_DOUBLE) {
-						stack->push(members.get<jlong>(f->offset));
+						stack->push(v.j);
 					}else {
-						stack->push(members.get<jint>(f->offset));
+						stack->push(v.i);
 					}
 					debug("getstatic %s.%s\n", f->owner->name->c_str(), f->name->c_str());
 				}
@@ -188,11 +219,11 @@ void frame::exec(const char * class_name, const char * method_name)
 				{
 					u2 index = pc.get<u2>();
 					field * f = current_const_pool->get_field(index, current_thread);
-					member_operator members(f->owner->static_members, f->owner->static_size());
+					object * oop = memery::ref2oop(f->owner->static_obj);
 					if (f->type == T_LONG || f->type == T_DOUBLE) {
-						members.put(stack->pop<jlong>(), f->offset);
+						oop->set_field(f, stack->pop<jlong>());
 					}else {
-						members.put(stack->pop<jint>(), f->offset);
+						oop->set_field(f, stack->pop<jint>());
 					}
 					debug("putstatic %s.%s\n", f->owner->name->c_str(), f->name->c_str());
 				}
@@ -212,11 +243,10 @@ void frame::exec(const char * class_name, const char * method_name)
 					}
 					*/
 					object * obj = memery::ref2oop(objref);
-					member_operator members(obj->data, obj->meta->size());
 					if (f->type == T_LONG || f->type == T_DOUBLE) {
-						stack->push(members.get<jlong>(f->offset));
+						stack->push(obj->get_field(f).j);
 					}else {
-						stack->push(members.get<jint>(f->offset));
+						stack->push(obj->get_field(f).i);
 					}
 					debug("getfield %s.%s\n on object ref %u\n", f->owner->name->c_str(), f->name->c_str(), objref);
 				}
@@ -233,15 +263,13 @@ void frame::exec(const char * class_name, const char * method_name)
 						objref = stack->pop<jreference>();
 						debug("%d\n",objref);
 						object * obj = memery::ref2oop(objref);
-						member_operator members(obj->data, obj->meta->size());
-						members.put(v, f->offset);
+						obj->set_field(f, v);
 					}else {
 						jint v = stack->pop<jint>();
 						objref = stack->pop<jreference>();
 						debug("%d\n",objref);
 						object * obj = memery::ref2oop(objref);
-						member_operator members(obj->data, obj->meta->size());
-						members.put(v, f->offset);
+						obj->set_field(f, v);
 					}
 				}
 				break;
@@ -263,8 +291,8 @@ void frame::exec(const char * class_name, const char * method_name)
 					u1 count = pc.get<u1>();
 					u1 zero = pc.get<u1>();
 					method * interface_method = current_const_pool->get_method(index, current_thread);
-					debug("invokeinterface [%d|%d|%d]\n", index, count, zero);
-					current_thread->call(interface_method);
+					debug("invokeinterface %s.%s [%d|%d|%d]\n ", interface_method->owner->name->c_str(), interface_method->name->c_str(), index, count, zero);
+					current_thread->call(interface_method, nullptr, true);
 				}
 				break;
 			case NEW:
@@ -276,12 +304,11 @@ void frame::exec(const char * class_name, const char * method_name)
 				break;
 			case NEWARRAY:
 				{
-					u1 type = pc.get<u1>();
+					jtype type = (jtype)pc.get<u1>();
 					if (4 <= type && type <= 11) {
 						const char * name[] = {"boolean", "char", "float", "double", "byte", "short", "int", "long", "object" };
-						debug("newarray of %s length: %d\n", name[type-T_BOOLEAN], stack->pop<jint>());
 					}
-					stack->push(128);
+					stack->push(current_thread->get_env()->create_basic_array(type, stack->pop<jint>()));
 				}
 				break;
 			case ANEWARRAY:
@@ -294,6 +321,12 @@ void frame::exec(const char * class_name, const char * method_name)
 					claxx * ca = c->get_array_claxx(current_thread);
 					stack->push(memery::alloc_heap_array(ca, length));
 					debug("anewarray of %s\n", ca->name->c_str());
+				}
+				break;
+			case ARRAYLENGTH:
+				{
+					jreference arrayref = stack->pop<jreference>();
+					stack->push(current_thread->get_env()->array_length(arrayref));
 				}
 				break;
 			case ATHROW:
@@ -315,7 +348,11 @@ void frame::exec(const char * class_name, const char * method_name)
 				}
 				break;
 			case IFNULL:
-				if (stack->pop<jreference>()) pc_offset(pc.get<u2>());
+				{
+					u2 offset = pc.get<u2>();
+					debug("ifnull %d\n", offset);
+					if (stack->pop<jreference>()) pc_offset(offset);
+				}
 				break;
 			case IFNONNULL:
 				{
@@ -333,6 +370,6 @@ void frame::exec(const char * class_name, const char * method_name)
 		print_stack();
 		print_locals();
 	}
-	debug("[%s.%s] exited\n", current_class->name->c_str(), current_method->name->c_str());
+	debug("call \e[34m[%s.%s]\e[0m exited\n", current_class->name->c_str(), current_method->name->c_str());
 }
 

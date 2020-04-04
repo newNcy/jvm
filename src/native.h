@@ -17,7 +17,11 @@ class environment
 		jvm * get_vm() { return vm; }
 		thread * get_thread() { return current_thread; }
 		
-		jreference new_chararray(uint32_t length);
+		jreference create_string(const std::string & bytes);
+		jint array_length(jreference ref);
+		void set_object_field(jreference ref, field * f, jvalue v);
+		jvalue get_object_field(jreference ref, field * f);
+		jreference create_basic_array(jtype type, uint32_t length);
 
 };
 

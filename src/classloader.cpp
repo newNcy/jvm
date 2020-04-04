@@ -68,8 +68,7 @@ class raw_const_pool
 			case CONSTANT_String:
 				{
 					//暂时不创建string
-					cp_utf8 * utf8 = get<symbol>(((cp_string*)info)->string_index);
-					ret->value.l = current_thread->create_string(utf8->c_str());
+					ret->utf8_str = get<symbol>(((cp_string*)info)->string_index);
 				}
 				break;
 			case CONSTANT_Integer:
@@ -283,7 +282,7 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 
 
 	std::vector<cp_info*> raw_pool_entries;
-	java_class->cpool = parse_const_pool(stream, raw_pool_entries);
+	java_class->cpool = parse_const_pool(stream, raw_pool_entries, current_thread);
 	if (!java_class->cpool) {
 		memery::dealloc_meta(java_class);
 		return nullptr;
@@ -321,7 +320,6 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 		f->name = raw_pool.get<symbol>( stream.get<u2>());
 		f->discriptor = raw_pool.get<symbol>( stream.get<u2>());
 		f->type = type_of_disc(f->discriptor->at(0));
-		//printf("field %s:%s\n", f->name->c_str(), f->discriptor->c_str());
 		u2 attr_count = stream.get<u2>();
 		while (attr_count --) {
 			attribute * attr = parse_attribute(stream, raw_pool);
@@ -337,11 +335,13 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 		}else {
 			java_class->fields[f->name->c_str()] = f;
 		}
+		//printf("field %s:%s static:%d type:%d size:%d\n", f->name->c_str(), f->discriptor->c_str(), f->is_static(),f->type, type_size[f->type-T_BOOLEAN]);
 		f->offset = off;
-		off += type_size[f->type];
+		off += type_size[f->type-T_BOOLEAN];
 	}
 	java_class->member_size = mem_off;
 	java_class->static_member_size = static_off;
+	//printf("%s mem size:%ld static mem size:%ld\n", java_class->name->c_str(), java_class->member_size, java_class->static_member_size);
 	//printf("field count: %d\n",java_class->fields.size());
 
 	u2 method_count = stream.get<u2>();
@@ -384,7 +384,7 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 }
 
 
-const_pool * classloader::parse_const_pool(byte_stream & stream, std::vector<cp_info*> & raw_pool)
+const_pool * classloader::parse_const_pool(byte_stream & stream, std::vector<cp_info*> & raw_pool, thread * current_thread)
 {
 	if (!stream.value()) return nullptr;
 
@@ -530,7 +530,7 @@ const_pool * classloader::parse_const_pool(byte_stream & stream, std::vector<cp_
 		}
 	}
 
-	raw_const_pool parser(raw_pool, cpool,current_thread);
+	raw_const_pool parser(raw_pool, cpool, current_thread);
 	for (int i = 1; i < const_count; i ++) {
 		parser.parse_entry(i);
 	}
@@ -877,7 +877,7 @@ void classloader::initialize_class(claxx * to_init, thread * current_thread)
 	if (!to_init || !current_thread) return;
 	if (!to_init->is_class() || to_init->state >= INITING) return;
 	to_init->state = INITING;
-	to_init->static_members = memery::alloc_static_members(to_init);
+	to_init->static_obj = memery::alloc_heap_object(to_init, true);
 	method * clinit = to_init->get_clinit_method();
 	if (clinit) {
 		current_thread->call(clinit);
@@ -890,5 +890,7 @@ array_claxx * classloader::create_array_claxx(const std::string & name, thread *
 	if (name[0] != '[') return nullptr;
 	if (name.length() < 2) return nullptr;
 	array_claxx * ret = new array_claxx(name, this, current_thread);
+	if (ret)
+		loaded_classes[name] = ret;
 	return  ret;
 }

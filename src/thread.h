@@ -115,7 +115,7 @@ struct frame
 	void setup_args();
 	void pc_offset(short offset) 
 	{
-		pc.rd += offset - 1;
+		pc.pos_offset(offset - 1);
 	}
 	void print_stack();
 	void print_locals();
@@ -134,12 +134,9 @@ struct thread
 	environment runtime_env;
 	thread(jvm * this_vm): runtime_env(this_vm, this) {}
 	environment * get_env() { return &runtime_env; }
-	jreference create_string(const std::string & bytes)
-	{
-		return 0;
-	}
+	jreference create_string(const std::string & bytes);
 	jvalue call_native(method * m,operand_stack * args = nullptr);
-	jvalue call(method * m,operand_stack * args = nullptr);
+	jvalue call(method * m,operand_stack * args = nullptr, bool is_interface = false);
 
 	void pop_frame();
 	void run();

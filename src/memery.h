@@ -38,8 +38,7 @@ class memery
 
 	static std::map<jreference, object*> ref_oop_map;
 	static object * ref2oop(jreference ref);
-	static jreference alloc_heap_object(claxx * meta);
+	static jreference alloc_heap_object(claxx * meta, bool is_static = false);
 	static jreference alloc_heap_array(claxx * meta, size_t length);
-	static char * alloc_static_members(claxx * meta);
 };
 

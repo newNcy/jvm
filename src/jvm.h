@@ -31,6 +31,7 @@ class jvm
 	vm_native vm_native_methods;
 	thread * new_thread();
 	jvm();
+	classloader * get_class_loader() { return cloader; }
 	void init_baisc_type();
 	void init(thread * current_thread);
 	~jvm();
