@@ -45,18 +45,29 @@ NATIVE void java_lang_Object_registerNatives(environment * env)
 	printf("java_lang_Object_registerNatives called\n");
 }
 
-NATIVE void java_lang_System_registerNatives(environment * env)
+NATIVE int java_lang_Object_hashCode(environment * env, jreference ref)
 {
-	printf("java_lang_System_registerNatives called\n");
+	printf("java_lang_Object_hashCode called return %d\n", ref);
+	return ref;
+}
+
+NATIVE void java_lang_Class_registerNatives(environment * env)
+{
+	printf("java_lang_Object_registerNatives called\n");
+}
+
+NATIVE void java_lang_System_registerNatives(environment * env, jreference prop)
+{
+	printf("java_lang_System_registerNatives called prop:%d\n", prop);
 }
 
 NATIVE void java_lang_System_loadLibrary(environment * env)
 {
 	printf("java_lang_System_loadLibrarycalled\n");
 }
-NATIVE void java_lang_System_initProperties(environment * env)
+NATIVE void java_lang_System_initProperties(environment * env, jreference prop)
 {
-	printf("java_lang_System_initProperties called\n");
+	printf("java_lang_System_initProperties called prop ref %d\n", prop);
 }
 
 NATIVE int Test_test(environment * env, int arg) 

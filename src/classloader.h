@@ -20,6 +20,8 @@ class classloader
 
 		void link_class(claxx * to_link);
 		void initialize_class(claxx * to_init,thread *  current_thread);
+		void create_mirror(claxx * cls, thread * current_thread);
+		claxx * claxx_from_mirror(jreference m);
 	private:
 		
 		const_pool * parse_const_pool(byte_stream & stream, std::vector<cp_info*> &, thread * current_thread);
@@ -28,6 +30,7 @@ class classloader
 		verification_type_info parse_verification_type_info(byte_stream & stream);
 		element_value * parse_element_value(byte_stream & stream);
 		std::map <std::string, claxx *> loaded_classes;
+		std::map <jreference , claxx *> mirror_classes;
 		//thread * current_thread = nullptr;
 		zip * rt_jar = nullptr;
 };

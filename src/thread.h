@@ -113,10 +113,6 @@ struct frame
 	code_attr		* code = nullptr;
 
 	void setup_args();
-	void pc_offset(short offset) 
-	{
-		pc.pos_offset(offset - 1);
-	}
 	void print_stack();
 	void print_locals();
 	byte_stream pc;

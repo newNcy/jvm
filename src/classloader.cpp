@@ -213,6 +213,7 @@ claxx * classloader::load_from_file(const std::string & file, thread * current_t
 	stream.set_buf(buf, info.st_size);
 	return load_class(stream, current_thread);
 }
+
 claxx * classloader::load_class(const std::string & name, thread * current_thread)
 {
 	if (!name.length()) return nullptr;
@@ -294,6 +295,7 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 
 	java_class->access_flag = stream.get<u2>();
 	java_class->name = java_class->cpool->get(stream.get<u2>())->sym_class->name;
+	loaded_classes[java_class->name->c_str()] = java_class;
 	u2 super_index = stream.get<u2>();
 	//printf("super %d\n", super_index);
 	if (super_index) 
@@ -379,7 +381,7 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 	}
 	java_class->state = LINKED;
 	//printf("loaded %s\n", java_class->name->c_str());
-	loaded_classes[java_class->name->c_str()] = java_class;
+	create_mirror(java_class, current_thread);
 	return java_class;
 }
 
@@ -884,7 +886,23 @@ void classloader::initialize_class(claxx * to_init, thread * current_thread)
 	}
 	to_init->state = INITED;
 }
+		
+void classloader::create_mirror(claxx * cls, thread * current_thread)
+{
+	claxx * java_lang_Class = load_class("java/lang/Class", current_thread);
+	printf("mirror for %s\n", cls->name->c_str());
+	cls->mirror = memery::alloc_heap_object(java_lang_Class);
+	mirror_classes[cls->mirror] = cls;
+}
 
+claxx * classloader::claxx_from_mirror(jreference m)
+{
+	auto it = mirror_classes.find(m);
+	if ( it != mirror_classes.end()) {
+		return it->second; 
+	}
+	return nullptr;
+}
 array_claxx * classloader::create_array_claxx(const std::string & name, thread * current_thread)
 {
 	if (name[0] != '[') return nullptr;

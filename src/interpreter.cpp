@@ -70,7 +70,7 @@ void frame::exec(const char * class_name, const char * method_name)
 					const_pool_item * c = current_const_pool->get(index);
 					debug("current_class %s %d\n", current_class->name->c_str(), c->tag);
 					if (c->tag == CONSTANT_Class ) {
-						stack->push(current_const_pool->get_class(index, current_thread)->static_obj);
+						stack->push(current_const_pool->get_class(index, current_thread)->mirror);
 						break;
 					}
 					if (c->tag == CONSTANT_Long || c->tag == CONSTANT_Double) {
@@ -111,12 +111,29 @@ void frame::exec(const char * class_name, const char * method_name)
 					stack->push<jreference>(locals->get<jreference>(index));
 				}
 				break;
+			case FLOAD_0:
+			case FLOAD_1:
+			case FLOAD_2:
+			case FLOAD_3: 
+				{
+					u1 index = op - FLOAD_0;
+					debug("fload %d\n", index);
+					stack->push(locals->get<jfloat>(index));
+				}
+				break;
 			case ALOAD_0:
 			case ALOAD_1:
 			case ALOAD_2:
 			case ALOAD_3:
 				debug("aload %d\n",op - ALOAD_0);
 				stack->push<jreference>(locals->get<jreference>(op -ALOAD_0));
+				break;
+			case ISTORE:
+				{
+					u1 index = pc.get<u1>();
+					debug("istore %d\n", index);
+					locals->put(stack->pop<jint>(), index); 
+				}
 				break;
 			case LSTORE:
 				locals->put(stack->pop<jlong>(),pc.get<u1>());
@@ -131,7 +148,7 @@ void frame::exec(const char * class_name, const char * method_name)
 			case ISTORE_2:
 			case ISTORE_3:
 				debug("istore %d\n",op - ISTORE_0);
-				locals->put(stack->pop<jint>(), pc.get<u1>());
+				locals->put(stack->pop<jint>(),op - ISTORE_0); 
 				break;
 			case ASTORE_0:
 			case ASTORE_1:
@@ -179,12 +196,60 @@ void frame::exec(const char * class_name, const char * method_name)
 					printf("iadd %d %d\n", a, b);
 				}
 				break;
+			case IUSHR:
+				{
+					jint v1 = stack->pop<jint>();
+					jint v2 = stack->pop<jint>();
+					jint s = v2 & 0x1f;
+					jint result = v1 >> s;
+					if (v1 < 0) {
+						result += 2<<(~s);
+					}
+					debug("iushr %d %d = %d\n", v1, v2, result);
+					stack->push(result);
+				}
+				break;
+			case IXOR:
+				{
+					jint a = stack->pop<jint>();
+					jint b = stack->pop<jint>();
+					jint result = a ^ b;
+					debug("ixor %d %d = %d\n", a, b, result);
+					stack->push(result);
+				}
+				break;
+			case FCMPG:
+				{
+					jint a = stack->pop<jint>();
+					jint b = stack->pop<jint>();
+					debug("fcmpg %d %d\n", a, b);
+					if ( a > b ) stack->push<jint>(1);
+					else if ( a == b ) stack->push<jint>(0);
+					else stack->push<jint>(-1);
+				}
+				break;
+			case IFGE:
+				{
+					jint value = stack->pop<jint>();
+					u2 offset = pc.get<u2>();
+					if (value >= 0)
+						pc.pos(current_pc + offset);
+				}
+				break;
+			case IFLE:
+				{
+					jint value = stack->pop<jint>();
+					u2 offset = pc.get<u2>();
+					if (value <= 0)
+						pc.pos(current_pc + offset);
+				}
+				break;
 			case IF_ACMPEQ:
 				{
 					jreference a = stack->pop<jreference>();
 					jreference b = stack->pop<jreference>();
 					debug("if_acmpeq %u %u\n", a, b);
-					if (a == b) pc_offset(pc.get<u2>());
+					if (a == b) pc.pos(current_pc+pc.get<u2>());
 				}
 				break;
 			case IF_ACMPNE:
@@ -192,15 +257,18 @@ void frame::exec(const char * class_name, const char * method_name)
 					jreference a = stack->pop<jreference>();
 					jreference b = stack->pop<jreference>();
 					debug("if_acmpne %u %u\n", a, b);
-					if (a != b) pc_offset(pc.get<u2>());
+					if (a != b) pc.pos(current_pc+pc.get<u2>());
 				}
 				break;
 			case GOTO:
 				{
 					u2 offset = pc.get<u2>();
-					pc_offset(offset);
+					pc.pos(current_pc+offset);
 					debug("goto %d\n", offset);
 				}
+				break;
+			case ARETURN:
+				{}
 				break;
 			case GETSTATIC: 
 				{
@@ -351,7 +419,7 @@ void frame::exec(const char * class_name, const char * method_name)
 				{
 					u2 offset = pc.get<u2>();
 					debug("ifnull %d\n", offset);
-					if (stack->pop<jreference>()) pc_offset(offset);
+					if (stack->pop<jreference>()) pc.pos(current_pc+offset);
 				}
 				break;
 			case IFNONNULL:
@@ -359,7 +427,7 @@ void frame::exec(const char * class_name, const char * method_name)
 					jreference ref = stack->pop<jreference>();
 					jshort offset = pc.get<u2>();
 					debug("ifnonnull %d goto %d\n", ref, current_pc + offset);
-					if (ref) pc_offset(offset);
+					if (ref) pc.pos(current_pc + offset);
 				}
 				break;
 			default:

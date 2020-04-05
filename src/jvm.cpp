@@ -51,11 +51,13 @@ void jvm::init_baisc_type()
 }
 void jvm::init(thread * current_thread)
 {
-	claxx * string_class = cloader->load_class("java/lang/String", current_thread);
 	claxx * system_class = cloader->load_class("java/lang/System", current_thread);
 	method * init_system_class = system_class->lookup_method("initializeSystemClass", "()V");
+	cloader->initialize_class(system_class, current_thread);
 	if (!init_system_class) return;
 	current_thread->call(init_system_class);
+	claxx * class_class = cloader->load_class("java/lang/Class", current_thread);
+	claxx * string_class = cloader->load_class("java/lang/String", current_thread);
 }
 
 void jvm::run(const std::vector<std::string> & args)
@@ -63,7 +65,8 @@ void jvm::run(const std::vector<std::string> & args)
 	if (args.empty()) return;
 	thread * main_thread = new_thread();	
 
-	//init(main_thread);
+	init(main_thread);
+	printf("----------------------------------------------------------------------------------------------\n");
 	claxx * main_class = cloader->load_class(args[0], main_thread);
 	if (main_class->state < INITED) cloader->initialize_class(main_class, main_thread);
 	if (!main_class) {

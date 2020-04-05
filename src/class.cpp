@@ -13,7 +13,7 @@ claxx * const_pool::get_class(u2 idx, thread * current_thread)
 	if (!item || item->tag != CONSTANT_Class) return nullptr;
 	class_ref * sym_class = item->sym_class;
 	claxx * ret = owner->loader->load_class(sym_class->name->c_str(), current_thread);
-	if (ret->state < INITING) ret->loader->initialize_class(ret, current_thread);
+	if (ret->state < INITED) ret->loader->initialize_class(ret, current_thread);
 	cache[idx] = ret;
 	return ret;
 }

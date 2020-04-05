@@ -14,7 +14,7 @@ jreference memery::alloc_heap_object(claxx * meta, bool is_static)
 	oop->meta = meta;
 	ref_oop_map[ref] = oop;
 	if (is_static) meta->static_obj = ref;
-	printf("\e[32mcreate instanse of %s ref:%d [%d] bytes\e[0m\n", meta->name->c_str(), ref, size);
+	printf("\e[32m[%d] %s [%d] bytes\e[0m\n", ref, meta->name->c_str(), size);
 	return ref;
 }
 
@@ -25,7 +25,7 @@ jreference memery::alloc_heap_array(claxx * meta, size_t length)
 	uint32_t size = sizeof(object) + meta->size();
 	object * oop = (object*)new char[size]();
 	new (oop) object(size, length);
-	printf("\e[32mcreate instanse of %s ref:%d length:%ld [%d] bytes\e[0m\n", meta->name->c_str(), ref, length, size);
+	printf("\e[32m[%d] %s [%d] length[%d] bytes\e[0m\n", ref, meta->name->c_str(), oop->array_length(), size);
 	ref_oop_map[ref] = oop;
 	return ref;
 }
