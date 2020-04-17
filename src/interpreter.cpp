@@ -415,7 +415,7 @@ void frame::exec(const char * class_name, const char * method_name)
 			case IFEQ:
 				{
 					jint value = stack->pop<jint>();
-					u2 offset = pc.get<u2>();
+					int16_t offset = pc.get<int16_t>();
 					if (value == 0) pc.pos(current_pc + offset);
 					debug("if %d == 0 goto %d\n", current_pc + offset);
 				}
@@ -423,7 +423,7 @@ void frame::exec(const char * class_name, const char * method_name)
 			case IFNE:
 				{
 					jint value = stack->pop<jint>();
-					u2 offset = pc.get<u2>();
+					int16_t offset = pc.get<int16_t>();
 					if (value != 0) pc.pos(current_pc + offset);
 					debug("if %d != 0 goto %d\n", current_pc + offset);
 				}
@@ -431,7 +431,7 @@ void frame::exec(const char * class_name, const char * method_name)
 			case IFLT:
 				{
 					jint value = stack->pop<jint>();
-					u2 offset = pc.get<u2>();
+					int16_t offset = pc.get<int16_t>();
 					if (value < 0) pc.pos(current_pc + offset);
 					debug("if %d != 0 goto %d\n", current_pc + offset);
 				}
@@ -439,7 +439,7 @@ void frame::exec(const char * class_name, const char * method_name)
 			case IFGE:
 				{
 					jint value = stack->pop<jint>();
-					u4 offset = pc.get<u2>();
+					int16_t offset = pc.get<int16_t>();
 					if (value >= 0) pc.pos(current_pc + offset);
 					debug("if %d >= 0 goto %d\n", value, current_pc + offset);
 				}
@@ -447,7 +447,7 @@ void frame::exec(const char * class_name, const char * method_name)
 			case IFGT:
 				{
 					jint value = stack->pop<jint>();
-					u2 offset = pc.get<u2>();
+					int16_t offset = pc.get<int16_t>();
 					if (value > 0) pc.pos(current_pc + offset);
 					debug("if %d >= 0 goto %d\n", value, current_pc + offset);
 				}
@@ -455,16 +455,26 @@ void frame::exec(const char * class_name, const char * method_name)
 			case IFLE:
 				{
 					jint value = stack->pop<jint>();
-					u2 offset = pc.get<u2>();
+					int16_t offset = pc.get<int16_t>();
 					if (value <= 0) pc.pos(current_pc + offset);
 					debug("if %d <= 0 goto %d\n", value, current_pc + offset);
 				}
 				break;
+			case IF_ICMPEQ:
+				{
+					jint v2 = stack->pop<jint>();
+					jint v1 = stack->pop<jint>();
+					int16_t offset = pc.get<int16_t>();
+					debug("if %u == %u goto %u+%u\n", v1, v2, current_pc, offset);
+					if (v1 == v2) pc.pos(current_pc + offset);
+				}
+				break;
+
 			case IF_ICMPNE:
 				{
 					jint v2 = stack->pop<jint>();
 					jint v1 = stack->pop<jint>();
-					u2 offset = pc.get<u2>();
+					int16_t offset = pc.get<int16_t>();
 					debug("if %u != %u goto %u+%u\n", v1, v2, current_pc, offset);
 					if (v1 != v2) pc.pos(current_pc + offset);
 				}
@@ -473,7 +483,7 @@ void frame::exec(const char * class_name, const char * method_name)
 				{
 					jint v2 = stack->pop<jint>();
 					jint v1 = stack->pop<jint>();
-					u2 offset = pc.get<u2>();
+					int16_t offset = pc.get<int16_t>();
 					debug("if %u < %u goto %u+%u\n", v1, v2, current_pc, offset);
 					if (v1 < v2) pc.pos(current_pc + offset);
 				}
@@ -482,7 +492,7 @@ void frame::exec(const char * class_name, const char * method_name)
 				{
 					jint v2 = stack->pop<jint>();
 					jint v1 = stack->pop<jint>();
-					u2 offset = pc.get<u2>();
+					int16_t offset = pc.get<int16_t>();
 					debug("if %u >= %u goto %u+%u\n", v1, v2, current_pc, offset);
 					if (v1 >= v2) pc.pos(current_pc + offset);
 				}
@@ -491,7 +501,7 @@ void frame::exec(const char * class_name, const char * method_name)
 				{
 					jint v2 = stack->pop<jint>();
 					jint v1 = stack->pop<jint>();
-					u2 offset = pc.get<u2>();
+					int16_t offset = pc.get<int16_t>();
 					debug("if %u > %u goto %u+%u\n", v1, v2, current_pc, offset);
 					if (v1 > v2) pc.pos(current_pc + offset);
 				}
@@ -502,7 +512,7 @@ void frame::exec(const char * class_name, const char * method_name)
 				{
 					jint v2 = stack->pop<jint>();
 					jint v1 = stack->pop<jint>();
-					u2 offset = pc.get<u2>();
+					int16_t offset = pc.get<int16_t>();
 					debug("if %u <= %u goto %u+%u\n", v1, v2, current_pc, offset);
 					if (v1 <= v2) pc.pos(current_pc + offset);
 				}
@@ -627,7 +637,7 @@ void frame::exec(const char * class_name, const char * method_name)
 					const char * msg []  = {"virtual", "special", "static"};
 					method * to_call = current_const_pool->get_method(pc.get<u2>(), current_thread);
 					if (to_call) {
-					debug("invoke%s %s.%s %s\n", msg[op-INVOKEVIRTUAL],to_call->owner->name->c_str(),  to_call->name->c_str(), to_call->discriptor->c_str());
+					debug("invoke%s %s.%s %s is_abstract %d\n", msg[op-INVOKEVIRTUAL],to_call->owner->name->c_str(),  to_call->name->c_str(), to_call->discriptor->c_str(), to_call->is_abstract());
 						if (to_call->is_static()) {
 							if (to_call->owner->state < INITED) to_call->owner->loader->initialize_class(to_call->owner, current_thread);
 						}

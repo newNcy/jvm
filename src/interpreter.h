@@ -94,6 +94,7 @@ enum {
 	IFGE			= 0x9c,
 	IFGT			,
 	IFLE			,
+	IF_ICMPEQ		,
 	IF_ICMPNE		= 0xa0,
 	IF_ICMPLT		= 0xa1,
 	IF_ICMPGE		= 0xa2,

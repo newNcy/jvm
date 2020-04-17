@@ -27,14 +27,10 @@ frame::frame(frame * caller, method * to_call, thread * context ):caller_frame(c
 	}
 	current_thread = context;
 	current_const_pool = current_class->cpool;
-
-	if (current_method->is_native()) {
-		stack = new operand_stack(2);
-		locals = new any_array(2);
-		return;
-	}
 	auto code_it = current_method->attributes.find("Code");
 	if (code_it == current_method->attributes.end()) {
+		stack = new operand_stack(2);
+		locals = new any_array(2);
 		return;
 	}
 	code = (code_attr*)code_it->second;
@@ -97,7 +93,7 @@ bool thread::handle_exception()
 				current_frame->current_method->discriptor->c_str());
 		unhandle_methods.push_back(std::make_pair(current_frame->current_method,current_frame->current_pc));
 		current_frame = current_frame->caller_frame;
-		//pop_frame();
+		pop_frame();
 	}
 	printf("unhandle exception %s at:\n", obj->meta->name->c_str());
 	for (auto && m : unhandle_methods) {
@@ -262,7 +258,7 @@ jvalue thread::call(method * m, operand_stack * args, bool is_interface, bool ca
 
 	jvalue ret = 0;
 
-	if (is_interface) {
+	if (is_interface || m->is_abstract()) {
 		jreference objref = temp_stack->top<jreference>();
 		object * oop = memery::ref2oop(objref);
 		m = oop->meta->lookup_method(m->name->c_str(), m->discriptor->c_str());
@@ -308,8 +304,9 @@ jvalue thread::call(method * m, operand_stack * args, bool is_interface, bool ca
 				}else {
 					ret = current_frame->stack->pop<jint>();
 				}
-			}catch (const std::runtime_error & e)  {
+			}catch (const std::string & e)  {
 				printf("return error while exiting %s.%s\n", current_frame->current_class->name->c_str(), current_frame->current_method->name->c_str());
+				abort();
 			}
 		}
 		pop_frame();

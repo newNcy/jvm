@@ -18,3 +18,12 @@ NATIVE void java_lang_System_initProperties(environment * env, jreference cls,  
 }
 
 
+NATIVE void java_lang_System_arraycopy(environment * env, jreference cls, jreference a, jint as,  jreference b, jint bs, jint len)
+{
+	for (int i = 0 ; i < len; i ++) {
+		jvalue e =  env->get_array_element(a, i + as);
+		printf("\e[31m%c", e.c);
+		env->set_array_element(b, i+bs, e);
+	}
+	printf("\n\e[0m");
+}

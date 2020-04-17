@@ -172,9 +172,9 @@ struct meta_base
 	bool is_bridge() const			{ return access_flag & 0x0040; }
 	bool is_varargs() const			{ return access_flag & 0x0080; }
 	bool is_native() const			{ return access_flag & 0x0100; }
-	bool is_abstract() const		{ return access_flag & 0x0200; }
-	bool is_strict() const			{ return access_flag & 0x0400; }
-	bool is_synthetic() const		{ return access_flag & 0x0800; }
+	bool is_abstract() const		{ return access_flag & 0x0400; }
+	bool is_strict() const			{ return access_flag & 0x0800; }
+	bool is_synthetic() const		{ return access_flag & 0x1000; }
 
 	virtual bool is_class() { return false; }
 	virtual bool is_method() { return false; }
