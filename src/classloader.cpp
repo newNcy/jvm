@@ -1,9 +1,11 @@
 #include "classloader.h"
 #include "class.h"
+#include "classfile.h"
 #include "memery.h"
 #include <cstring>
 #include <cstdio>
 #include <stdexcept>
+#include <utility>
 #include <zip.h>
 #include <malloc.h>
 #include <sys/stat.h>
@@ -11,6 +13,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include "jvm.h"
+#include "object.h"
 #include "thread.h"
 
 class raw_const_pool 
@@ -74,13 +77,13 @@ class raw_const_pool
 			case CONSTANT_Integer:
 				{
 					cp_int * num = (cp_int*)info;
-					ret->value.i = *(jint*)&(num->bytes);
+					ret->value.i = num->bytes;
 				}
 				break;
 			case CONSTANT_Float:
 				{
 					cp_float * num = (cp_float*)info;
-					ret->value.f = *(jfloat*)&(num->bytes);
+					ret->value.f = num->bytes;
 				}
 				break;
 			case CONSTANT_Long:
@@ -92,7 +95,7 @@ class raw_const_pool
 			case CONSTANT_Double:
 				{
 					cp_double * num = (cp_double*)info;
-					ret->value.d = *(jdouble*)&num->bytes;
+					ret->value.d = num->bytes;
 				}
 				break;
 			case CONSTANT_NameAndType:
@@ -284,6 +287,7 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 
 	std::vector<cp_info*> raw_pool_entries;
 	java_class->cpool = parse_const_pool(stream, raw_pool_entries, current_thread);
+	java_class->cpool->owner = java_class;
 	if (!java_class->cpool) {
 		memery::dealloc_meta(java_class);
 		return nullptr;
@@ -291,11 +295,11 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 	java_class->cpool->owner = java_class;
 	const raw_const_pool raw_pool(raw_pool_entries, nullptr, current_thread);
 
-	//printf("const pool size %d\n", java_class->cpool->size());
 
 	java_class->access_flag = stream.get<u2>();
 	java_class->name = java_class->cpool->get(stream.get<u2>())->sym_class->name;
-	loaded_classes[java_class->name->c_str()] = java_class;
+	//fprintf(stderr, "%s const pool size %ld\n", java_class->name->c_str(), java_class->cpool->count);
+	record_claxx(java_class);
 	u2 super_index = stream.get<u2>();
 	//printf("super %d\n", super_index);
 	if (super_index) 
@@ -308,13 +312,16 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 	u2 field_count = stream.get<u2>();
 
 	//先把父类属性放进来,不知道对不对，但是肯定可以,owner怎么置，或者复制一个？,不用了生成了
-	/*if (java_class->super_class) {
-		for (auto f : java_class->super_class->fields) {
-		}
-	}
-	*/
 	int mem_off = 0;
 	int static_off = 0;
+	if (java_class->super_class) {
+		for (auto f : java_class->super_class->fields) {
+			java_class->fields.insert(f);
+		}
+		mem_off = java_class->super_class->member_size;
+		static_off = java_class->super_class->static_size();;
+	}
+	
 	for (int i = 0; i < field_count; i++) {
 		field * f = memery::alloc_meta<field>();
 		f->owner = java_class;
@@ -322,6 +329,12 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 		f->name = raw_pool.get<symbol>( stream.get<u2>());
 		f->discriptor = raw_pool.get<symbol>( stream.get<u2>());
 		f->type = type_of_disc(f->discriptor->at(0));
+		if (f->type == T_OBJECT) {
+			printf("field dis %s\n", f->discriptor->c_str());
+			//f->meta = load_class_from_disc(f->discriptor->c_str(), current_thread);
+		}else {
+			f->meta = load_class(f->discriptor->c_str(), current_thread);
+		}
 		u2 attr_count = stream.get<u2>();
 		while (attr_count --) {
 			attribute * attr = parse_attribute(stream, raw_pool);
@@ -339,7 +352,7 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 		}
 		//printf("field %s:%s static:%d type:%d size:%d\n", f->name->c_str(), f->discriptor->c_str(), f->is_static(),f->type, type_size[f->type-T_BOOLEAN]);
 		f->offset = off;
-		off += type_size[f->type-T_BOOLEAN];
+		off += type_size[f->type];
 	}
 	java_class->member_size = mem_off;
 	java_class->static_member_size = static_off;
@@ -456,8 +469,6 @@ const_pool * classloader::parse_const_pool(byte_stream & stream, std::vector<cp_
 				{
 					cp_long * num8 = memery::alloc_meta<cp_long>();
 					num8->bytes = stream.get<u8>();
-					raw_pool.push_back(nullptr);
-					i++;
 					info = num8;
 				}
 				break;
@@ -465,8 +476,6 @@ const_pool * classloader::parse_const_pool(byte_stream & stream, std::vector<cp_
 				{
 					cp_double * num8 = memery::alloc_meta<cp_double>();
 					num8->bytes = stream.get<u8>();
-					raw_pool.push_back(nullptr);
-					i++;
 					info = num8;
 				}
 				break;
@@ -529,6 +538,10 @@ const_pool * classloader::parse_const_pool(byte_stream & stream, std::vector<cp_
 		if (info) {
 			info->tag = tag;
 			raw_pool.push_back(info);
+			if (info->tag == CONSTANT_Long || info->tag == CONSTANT_Double) {
+				raw_pool.push_back(nullptr);
+				i ++;
+			}
 		}
 	}
 
@@ -680,11 +693,9 @@ attribute * classloader::parse_attribute(byte_stream & stream,const raw_const_po
 		line_number_table_attr * ln_table = memery::alloc_meta<line_number_table_attr>();
 		u2 table_length = stream.get<u2>();
 		while (table_length --) {
-			line_number ln = {
-				stream.get<u2>(),
-				stream.get<u2>(),
-			};
-			ln_table->line_number_table.push_back(ln);
+			auto p = std::make_pair(stream.get<u2>(), stream.get<u2>());
+			//printf("line %d %d\n", p.first, p.second);
+			ln_table->line_number_table.insert(p);
 		}
 		ret = ln_table;
 	}else if (name->equals("LocalVariableTable")) {
@@ -836,7 +847,6 @@ jtype classloader::type_of_disc(char c)
 	}
 }
 
-
 claxx * classloader::load_class_from_disc(const std::string & disc, thread * current_thread)
 {
 	if (disc.length() < 3) return nullptr;
@@ -869,6 +879,11 @@ jtype classloader::type_of_method_disc(symbol * dis,std::vector<jtype> & args)
 	return type_of_disc(dis->at(i));
 }
 
+void classloader::record_claxx(claxx * c)
+{
+	if (!c) return;
+	loaded_classes[c->name->c_str()] = c;
+}
 
 void classloader::link_class(claxx * to_link)
 {
@@ -889,9 +904,14 @@ void classloader::initialize_class(claxx * to_init, thread * current_thread)
 		
 void classloader::create_mirror(claxx * cls, thread * current_thread)
 {
+	printf("create mirror for %s\n", cls->name->c_str());
 	claxx * java_lang_Class = load_class("java/lang/Class", current_thread);
-	printf("mirror for %s\n", cls->name->c_str());
 	cls->mirror = memery::alloc_heap_object(java_lang_Class);
+	/*
+	jreference name = current_thread->get_env()->create_string(cls->name->c_str());
+	auto nfd = java_lang_Class->lookup_field("name");
+	current_thread->get_env()->set_object_field(cls->mirror, nfd, name);
+	*/
 	mirror_classes[cls->mirror] = cls;
 }
 
@@ -911,4 +931,9 @@ array_claxx * classloader::create_array_claxx(const std::string & name, thread *
 	if (ret)
 		loaded_classes[name] = ret;
 	return  ret;
+}
+	
+void classloader::create_primitive(jtype t)
+{
+	new primitive_claxx(t, this);
 }

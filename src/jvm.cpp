@@ -2,6 +2,7 @@
 #include "class.h"
 #include "classloader.h"
 #include "thread.h"
+#include <csignal>
 #include <cstdio>
 #include <dlfcn.h>
 #include <sstream>
@@ -48,15 +49,25 @@ vm_native::native_metod vm_native::find_native_implement(method * m)
 
 void jvm::init_baisc_type()
 {
+	cloader->create_primitive(T_VOID);
+	cloader->create_primitive(T_BOOLEAN);
+	cloader->create_primitive(T_CHAR);
+	cloader->create_primitive(T_FLOAT);
+	cloader->create_primitive(T_DOUBLE);
+	cloader->create_primitive(T_BYTE);
+	cloader->create_primitive(T_SHORT);
+	cloader->create_primitive(T_INT);
+	cloader->create_primitive(T_LONG);
 }
 void jvm::init(thread * current_thread)
 {
+	claxx * class_class = cloader->load_class("java/lang/Class", current_thread);
+	init_baisc_type();
 	claxx * system_class = cloader->load_class("java/lang/System", current_thread);
 	method * init_system_class = system_class->lookup_method("initializeSystemClass", "()V");
 	cloader->initialize_class(system_class, current_thread);
 	if (!init_system_class) return;
 	current_thread->call(init_system_class);
-	claxx * class_class = cloader->load_class("java/lang/Class", current_thread);
 	claxx * string_class = cloader->load_class("java/lang/String", current_thread);
 }
 
@@ -100,3 +111,5 @@ jvm::~jvm()
 	threads.clear();
 	if (cloader->rt_jar) zip_close(cloader->rt_jar);
 }
+
+

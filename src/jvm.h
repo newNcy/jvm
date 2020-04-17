@@ -1,6 +1,7 @@
 #pragma once
 #include "class.h"
 #include "memery.h"
+#include <csignal>
 #include <vector>
 #include <string>
 #include <cstdio>
@@ -23,11 +24,14 @@ struct vm_native
 };
 
 
+
 class jvm
 {
 	classloader * cloader = nullptr;
-	std::vector<thread *> threads;
 	public:
+	std::vector<thread *> threads;
+	void on_global_signal(int, siginfo_t*, void*);
+	void on_signal(int sig);
 	vm_native vm_native_methods;
 	thread * new_thread();
 	jvm();
@@ -37,4 +41,5 @@ class jvm
 	~jvm();
 	void load_runtime(const std::string & runtime_path);
 	void run(const std::vector<std::string> & args);
+
 };

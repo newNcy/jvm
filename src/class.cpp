@@ -3,7 +3,9 @@
 #include "memery.h"
 #include "jvm.h"
 #include "thread.h"
+#include <cstring>
 #include <sstream>
+#include <stdexcept>
 
 claxx * const_pool::get_class(u2 idx, thread * current_thread)
 {
@@ -40,7 +42,6 @@ method * const_pool::get_method(u2 idx, thread * current_thread)
 			if (ret) break;
 		}
 	}
-	if (!ret) abort();
 	cache[idx] = ret;
 	return ret;
 }
@@ -57,9 +58,11 @@ field * const_pool::get_field(u2 idx, thread * current_thread)
 	if (!field_owner) return nullptr;
 	field * ret = field_owner->lookup_field(sym_field->name->c_str());
 	if (!ret) ret = field_owner->lookup_static_field(sym_field->name->c_str());
-	if (ret->type == T_OBJECT) {
-		if (!ret->meta) {
+	if (!ret->meta) {
+		if (ret->type == T_OBJECT) {
 			ret->meta = owner->loader->load_class_from_disc(ret->discriptor->c_str(), current_thread);
+		}else {
+			ret->meta = owner->loader->load_class(ret->discriptor->c_str(), current_thread);
 		}
 	}
 	cache[idx] = ret;
@@ -79,6 +82,20 @@ jreference const_pool::get_string(u2 idx, thread * current_thread)
 	return ret;
 }
 
+claxx * field::get_meta(thread * current_thread)
+{
+	if (meta) return meta;
+	if (type == T_OBJECT && discriptor->at(0) != '[') {
+		meta = owner->loader->load_class_from_disc(discriptor->c_str(), current_thread);
+		owner->loader->initialize_class(meta, current_thread);
+	}else {
+		meta = owner->loader->load_class(discriptor->c_str(), current_thread);
+	}
+	if (!meta) {
+		throw std::runtime_error(std::string("ClassNotFound") + discriptor->c_str());
+	}
+	return meta;
+}
 
 method * claxx::get_init_method()
 {
@@ -92,6 +109,7 @@ method * claxx::get_clinit_method()
 
 method * claxx::lookup_method(const std::string & name, const std::string & discriptor, bool recursive)
 {
+	//printf("look up %s %s in %s\n", name.c_str(), discriptor.c_str(), this->name->c_str());
 	auto byname = methods.find(name);
 	if (byname != methods.end()) {
 		auto bydisc = byname->second.find(discriptor);
@@ -99,9 +117,17 @@ method * claxx::lookup_method(const std::string & name, const std::string & disc
 			return bydisc->second;
 		}
 	}
+	/*
+	 for (auto itf : interfaces) {
+		auto m = itf->lookup_method(name, discriptor, recursive);
+		if (m) return m;
+	}
+	*/
+
 	if (recursive && super_class) {
 		return super_class->lookup_method(name, discriptor);
 	}
+
 	return nullptr;
 }
 
@@ -118,6 +144,17 @@ field * claxx::lookup_static_field(const std::string & name)
 	return nullptr;
 }
 
+bool claxx::check_cast(claxx * sub)
+{
+	if (sub == this) return true;
+	for (auto cls : this->interfaces) {
+		if (cls->check_cast(sub)) return true;
+	}
+	if (super_class) {
+		return super_class->check_cast(sub);
+	}
+	return false;
+}
 claxx * claxx::get_array_claxx(thread * current_thread)
 {
 	std::stringstream ss;
@@ -127,9 +164,15 @@ claxx * claxx::get_array_claxx(thread * current_thread)
 	return this->loader->load_class(ss.str().c_str(), current_thread);
 }
 
+jreference claxx::instantiate(thread * current_thread)
+{
+	if (this->state < INITED) loader->initialize_class(this, current_thread);
+	return memery::alloc_heap_object(this);
+}
+
 symbol * make_symbol(const std::string & str)
 {
-	symbol * sym = (symbol*)new char[sizeof(symbol) + str.length()]();
+	symbol * sym = (symbol*)new char[sizeof(symbol) + str.length() + 1]();
 	strcpy((char*)sym->bytes, str.c_str());
 	return sym;
 }
@@ -139,9 +182,20 @@ array_claxx::array_claxx(const std::string & binary_name, classloader * ld, thre
 	this->name = make_symbol(binary_name);
 	this->loader = ld;
 	int i = 0;
-	while (i < binary_name.length() && binary_name[i++] == '[') dimensions ++;
+	while (i < binary_name.length() && binary_name[i] == '[') i++,dimensions ++;
 	this->componen_type = ld->type_of_disc(binary_name[i]);
 	if (binary_name[i] == 'L') {
 		this->component = ld->load_class(std::string(binary_name, i, binary_name.length()), current_thread);
 	}
+	super_class = ld->load_class("java/lang/Object", current_thread);
+	ld->create_mirror(this, current_thread);
+}
+
+primitive_claxx::primitive_claxx(jtype t, classloader *ld):type(t)
+{
+	this->loader = ld;
+	this->name = make_symbol(std::string("") + type_disc[t]);
+	ld->record_claxx(this);
+	ld->create_mirror(this, nullptr);
+	printf("primitive %s ref %d\n", this->name->c_str(), this->mirror);
 }

@@ -1,6 +1,7 @@
 #pragma once
 #include "classfile.h"
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include <map>
 
@@ -109,15 +110,10 @@ struct signature_attr : public attribute
 	u2 signature_index;
 };
 
-struct line_number
-{
-	u2 start_pc;
-	u2 line_number;
-};
 
 struct line_number_table_attr : public attribute
 {
-	std::vector<line_number> line_number_table;
+	std::unordered_map<u2,u2> line_number_table;
 };
 
 

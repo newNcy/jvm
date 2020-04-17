@@ -1,7 +1,11 @@
 #pragma once
+#include <cstddef>
+#include <cstdio>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include <map>
+#include <set>
 #include "classfile.h"
 #include "attribute.h"
 
@@ -58,6 +62,15 @@ union jvalue
 	jvalue(jlong v):		j(v) {}
 	jvalue(jdouble v):		d(v) {}
 	jvalue(jreference v):	l(v) {}
+	operator jboolean()		{ return z; }
+	operator jchar()		{ return c; }
+	operator jfloat()		{ return f; }
+	operator jdouble()		{ return d; }
+	operator jbyte()		{ return b; }
+	operator jshort()		{ return s; }
+	operator jint()			{ return i; }
+	operator jlong()		{ return j; }
+	operator jreference()	{ return l; }
 };
 
 template <jtype T> struct jtype_traits;
@@ -84,9 +97,9 @@ template <> struct jtype_value_traits<jint>			{ enum { type_value = T_INT};};
 template <> struct jtype_value_traits<jlong>		{ enum { type_value = T_LONG};};
 template <> struct jtype_value_traits<jreference>	{ enum { type_value = T_OBJECT};};
 
-const static uint32_t type_size[] = {1, 2, 4, 8, 1, 2, 4, 8, 4};
-const static char type_disc[] = {'z', 'c', 'f', 'd', 'b', 's', 'i', 'j', /* x */'@'};
-const static char * type_text[] = {"boolean", "char", "float", "double", "byte", "short", "int", "long", "objet"};
+const static uint32_t type_size[] = {0,0,0,0, 1, 2, 4, 8, 1, 2, 4, 8, 4};
+const static char type_disc[] = {'V',0,0,0 ,'Z', 'C', 'F', 'D', 'B', 'S', 'I', 'J', /* x */'@'};
+const static char * type_text[] = {"void","","","","boolean", "char", "float", "double", "byte", "short", "int", "long", "objet"};
 
 struct symbol_ref 
 {
@@ -164,7 +177,6 @@ struct meta_base
 	bool is_synthetic() const		{ return access_flag & 0x0800; }
 
 	virtual bool is_class() { return false; }
-	virtual bool is_array() { return false; }
 	virtual bool is_method() { return false; }
 	virtual bool is_field() { return false; }
 };
@@ -182,6 +194,7 @@ struct field : public name_and_type_meta
 	int offset = -1;
 	jtype type;
 	claxx * meta = nullptr; 
+	claxx * get_meta(thread * current_thread);
 };
 struct method : public name_and_type_meta 
 {
@@ -197,7 +210,8 @@ struct const_pool
 	std::vector<const_pool_item *> data;
 	std::vector<void*> cache;
 	public:
-	const_pool(size_t size): data(size), cache(size) 
+	size_t count = 0;
+	const_pool(size_t size): data(size), cache(size) ,count(size)
 	{
 		for (auto p : cache) p = nullptr;
 	}
@@ -209,7 +223,6 @@ struct const_pool
 		if (!check(idx)) return;
 		data[idx] = item;
 	}
-	void * pre_get(int idx, tag_enum tag);
 	const_pool_item * get(int idx)
 	{
 		if (!check(idx)) return nullptr;
@@ -251,6 +264,7 @@ struct claxx : public class_ref, meta_base
 	std::map<std::string,std::map<std::string, method *> > methods;
 	std::map<std::string,field*> fields;
 	std::map<std::string,field*> static_fields;
+	std::set<claxx * > childs;
 	const_pool * cpool = nullptr;
 
 	size_t static_member_size = 0;
@@ -259,6 +273,8 @@ struct claxx : public class_ref, meta_base
 	jreference static_obj = 0; //暂时这么存放静态数据
 
 	bool is_class() { return true; }
+	virtual bool is_array() { return false; }
+	virtual bool is_primitive() { return false; }
 	size_t static_size() { return static_member_size; }
 	size_t size() const { return member_size;}
 	virtual size_t size(int length) const { return 0;};
@@ -268,16 +284,25 @@ struct claxx : public class_ref, meta_base
 	field * lookup_field(const std::string & name);
 	field * lookup_static_field(const std::string & name);
 	claxx * get_array_claxx(thread *);
+	bool check_cast(claxx * sub);
+	jreference instantiate(thread *);
 };
 
 struct array_claxx : public claxx
 {
 	bool is_array() override { return true; }
-	size_t size(int length) const override { return claxx::size() + length*type_size[componen_type-T_BOOLEAN];}
+	size_t size(int length) const override { return length*type_size[componen_type];}
 	uint32_t dimensions = 0;
 	array_claxx(const std::string & binary_name, classloader * ld, thread * current_thread);
 	jtype componen_type;
 	claxx * component = nullptr;
+};
+
+struct primitive_claxx : public claxx 
+{
+	virtual bool is_primitive() { return true; }
+	primitive_claxx(jtype t, classloader *ld);
+	jtype type;
 };
 
 symbol * make_symbol(const std::string & str);
