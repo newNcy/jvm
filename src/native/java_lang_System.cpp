@@ -22,7 +22,7 @@ NATIVE void java_lang_System_arraycopy(environment * env, jreference cls, jrefer
 {
 	for (int i = 0 ; i < len; i ++) {
 		jvalue e =  env->get_array_element(a, i + as);
-		printf("\e[31m%c", e.c);
+		printf("&#%d;",e.c);
 		env->set_array_element(b, i+bs, e);
 	}
 	printf("\n\e[0m");

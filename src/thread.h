@@ -124,6 +124,8 @@ struct frame
 	code_attr		* code = nullptr;
 	u4 current_pc   = 0;
 	bool exception_occured = false;
+	std::string runtime_error;
+	void throw_exception(const char * name);
 	void setup_args();
 	void print_stack();
 	void print_locals();

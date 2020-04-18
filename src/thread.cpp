@@ -47,6 +47,11 @@ frame::frame(frame * caller, method * to_call, thread * context ):caller_frame(c
 
 }
 
+void frame::throw_exception(const char * name)
+{
+	exception_occured = true;
+	runtime_error = name;
+}
 frame::~frame()
 {
 }
@@ -72,7 +77,7 @@ void thread::pop_frame()
 bool thread::handle_exception()
 {
 	std::vector<std::pair<method*, u2>> unhandle_methods;
-	jreference e = current_frame->stack->top<jreference>();
+	jreference e = current_frame->stack->pop<jreference>();
 	object * obj = memery::ref2oop(e);
 	for (;current_frame;) {
 		for (exception & e : current_frame->code->exceptions) {
@@ -285,6 +290,9 @@ jvalue thread::call(method * m, operand_stack * args, bool is_interface, bool ca
 			}
 		}
 		try {
+			if (!m->is_static() && new_frame->locals->get<jreference>(0) == null) {
+				throw_exception_to_java("java/lang/NullPointerException"); 
+			}
 			current_frame->exec(m->owner->name->c_str(), m->name->c_str());
 		}catch(const char *  e) {
 			throw_exception_to_java(e);
@@ -305,8 +313,7 @@ jvalue thread::call(method * m, operand_stack * args, bool is_interface, bool ca
 					ret = current_frame->stack->pop<jint>();
 				}
 			}catch (const std::string & e)  {
-				printf("return error while exiting %s.%s\n", current_frame->current_class->name->c_str(), current_frame->current_method->name->c_str());
-				abort();
+				throw_exception_to_java(e);
 			}
 		}
 		pop_frame();

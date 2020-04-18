@@ -170,6 +170,16 @@ void frame::exec(const char * class_name, const char * method_name)
 				debug("aload %d\n",op - ALOAD_0);
 				stack->push<jreference>(locals->get<jreference>(op -ALOAD_0));
 				break;
+			case IALOAD:
+				{
+					jint index = stack->pop<jint>();
+					jreference ref = stack->pop<jreference>();
+					jint value = current_thread->get_env()->get_array_element(ref, index);
+					stack->push(value);
+					debug("iaload %d[%d] -> %d\n", ref, index, value);
+				}
+				break;
+
 			case AALOAD:
 				{
 					jint index = stack->pop<jint>();
@@ -183,7 +193,7 @@ void frame::exec(const char * class_name, const char * method_name)
 				{
 					jint index = stack->pop<jint>();
 					jreference arr = stack->pop<jreference>();
-					stack->push(current_thread->get_env()->get_array_element(arr,index).l);
+					stack->push(current_thread->get_env()->get_array_element(arr,index).c);
 					debug("caload %d[%d] %d\n", arr, index, stack->top<jreference>());
 				}
 				break;
@@ -215,6 +225,15 @@ void frame::exec(const char * class_name, const char * method_name)
 			case ASTORE_3:
 				debug("astore %d\n", op - ASTORE_0);
 				locals->put<jreference>(stack->pop<jreference>(), op-ASTORE_0);
+				break;
+			case IASTORE:
+				{
+					jint value = stack->pop<jint>();
+					jint index = stack->pop<jint>();
+					jreference arrayref = stack->pop<jreference>();
+					debug("iastore %d[%d] = %d\n", arrayref, index, value);
+					current_thread->get_env()->set_array_element(arrayref, index, value);
+				}
 				break;
 			case AASTORE:
 				{
@@ -316,12 +335,31 @@ void frame::exec(const char * class_name, const char * method_name)
 					printf("irem %d %d\n", a, b);
 				}
 				break;
+			case ISHL:
+				{
+					jint v2 = stack->pop<jint>();
+					jint v1 = stack->pop<jint>();
+					jint s = v2 & 0x3f;
+					jint result = v1 << s;
+					debug("lshl %ld %d = %ld\n", v1, v2, result);
+					stack->push(result);
+				}
+				break;
 			case LSHL:
 				{
 					jint v2 = stack->pop<jint>();
 					jlong v1 = stack->pop<jlong>();
 					jint s = v2 & 0x3f;
 					jlong result = v1 << s;
+					debug("lshl %ld %d = %ld\n", v1, v2, result);
+					stack->push(result);
+				}
+				break;
+			case IOR:
+				{
+					jint v2 = stack->pop<jint>();
+					jint v1 = stack->pop<jint>();
+					jint result = v1 | v2;
 					debug("lshl %ld %d = %ld\n", v1, v2, result);
 					stack->push(result);
 				}
@@ -399,6 +437,13 @@ void frame::exec(const char * class_name, const char * method_name)
 					}
 					debug("f2i %f\n", v);
 					stack->push(result);
+				} 
+				break;
+			case I2C:
+				{
+					jchar v = stack->pop<jint>();
+					stack->push<jint>(v);
+					debug("i2c %d\n", v);
 				} 
 				break;
 			case FCMPL:
@@ -590,9 +635,8 @@ void frame::exec(const char * class_name, const char * method_name)
 					jreference objref = stack->pop<jreference>();
 					debug("getfield %s.%s on object ref %u\n", f->owner->name->c_str(), f->name->c_str(), objref);
 					 if (!objref) {
-						fflush(stdout);
+						throw "java/lang/NullPointerException";
 						//abort();
-						return;
 					}
 					object * obj = memery::ref2oop(objref);
 					if (f->type == T_LONG || f->type == T_DOUBLE) {

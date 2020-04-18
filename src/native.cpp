@@ -33,16 +33,57 @@ jreference environment::create_string_intern(const std::string & bytes)
 	return ref;
 }
 
+int unicode_length(const char * buf, int len)
+{
+	int count = 0;
+	for (int i = 0 ; i < len; i++) {
+		count ++;
+		unsigned char c = buf[i];
+		if (c == 0xed) {
+			i += 5;
+		}else if (c >= 0xe0) { // 1110 0000
+			i += 2;
+		}else if (c >= 0xc0) { // 1100 0000
+			i += 1;
+		}
+	}
+	return count;
+}
+
+jchar utf8_to_unicode(const char * buf, int len, int & took)
+{
+		unsigned char c = *buf;
+		jchar cur = 0;
+		if (c == 0xed) {
+			cur = 0x10000 + ((buf[1] & 0x0f) << 16) + ((buf[3] & 0x3f) << 10) + ((buf[4] & 0x0f) << 6) + (buf[5] & 0x3f);
+			took = 6;
+		}else if (c >= 0xe0) { // 1110 0000
+			cur = ((buf[0] & 0xf) << 12) + ((buf[1] & 0x3f) << 6) + (buf[2] & 0x3f);
+			took = 3;
+		}else if (c >= 0xc0) { // 1100 0000
+			cur = ((buf[0] & 0x1f) << 6) + (buf[1] & 0x3f);
+			took = 2;
+		}else {
+			cur = buf[0] & 0x7f;
+			took = 1;
+		}
+		return cur;
+}
 jreference environment::create_string(const std::string & bytes)
 {
-	printf("create string [%s]\n", bytes.c_str());
+	printf("create string [%ld, %s]\n", bytes.length(), bytes.c_str());
+	int length = unicode_length(bytes.c_str(), bytes.length());
+
 	function_time t(__PRETTY_FUNCTION__);
 	claxx * java_lang_String = get_vm()->get_class_loader()->load_class("java/lang/String", get_thread());
 	jreference ref =  memery::alloc_heap_object(java_lang_String);
-	jreference value = create_basic_array(T_CHAR, bytes.length());
+	jreference value = create_basic_array(T_CHAR, length);
 	int idx = 0;
-	for (auto c : bytes) {
-		set_array_element(value, idx++, (jchar)c);
+	int took = 0;
+	while (took < bytes.length()) {
+		int t = 0;
+		set_array_element(value, idx++, utf8_to_unicode(bytes.c_str() + took, bytes.length(), t));
+		took += t;
 	}
 	field * fv = java_lang_String->lookup_field("value");
 	set_object_field(ref, fv, value);

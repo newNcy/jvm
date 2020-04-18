@@ -9,7 +9,6 @@
 
 jvm::jvm():cloader(memery::alloc_meta<classloader>()) 
 {
-
 }
 
 void jvm::load_runtime(const std::string & runtime_path)
@@ -22,6 +21,12 @@ void jvm::load_runtime(const std::string & runtime_path)
 thread * jvm::new_thread()
 {
 	thread * ret = new thread(this);
+	if (!thread_group) {
+		claxx * java_lang_ThreadGroup = cloader->load_class("java/lang/ThreadGroup", ret);
+		thread_group = java_lang_ThreadGroup->instantiate(ret);
+	}
+	auto f = ret->get_env()->lookup_field(ret->get_env()->get_class(ret->mirror), "group");
+	ret->get_env()->set_object_field(ret->mirror, f, thread_group);
 	threads.push_back(ret);
 	return ret;
 }
@@ -75,6 +80,7 @@ void jvm::run(const std::vector<std::string> & args)
 {
 	if (args.empty()) return;
 	thread * main_thread = new_thread();	
+
 
 	init(main_thread);
 	printf("----------------------------------------------------------------------------------------------\n");

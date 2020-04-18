@@ -19,3 +19,7 @@ NATIVE jreference java_lang_Thread_isAlive(environment * env, jreference cls)
 NATIVE void java_lang_Thread_start0(environment * env, jreference cls) 
 {
 }
+
+NATIVE void java_lang_Thread_setPriority0(environment * env, jreference t) 
+{
+}

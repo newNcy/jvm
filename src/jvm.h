@@ -29,6 +29,7 @@ class jvm
 {
 	classloader * cloader = nullptr;
 	public:
+	jreference thread_group = null;
 	std::vector<thread *> threads;
 	void on_global_signal(int, siginfo_t*, void*);
 	void on_signal(int sig);
