@@ -59,6 +59,9 @@ field * const_pool::get_field(u2 idx, thread * current_thread)
 	if (!field_owner) return nullptr;
 	field * ret = field_owner->lookup_field(sym_field->name->c_str());
 	if (!ret) ret = field_owner->lookup_static_field(sym_field->name->c_str());
+	if (!ret) {
+		throw std::runtime_error(std::string("field:") + field_owner->name->c_str() + " " + sym_field->name->c_str());
+	}
 	if (!ret->meta) {
 		if (ret->type == T_OBJECT) {
 			ret->meta = owner->loader->load_class_from_disc(ret->discriptor->c_str(), current_thread);

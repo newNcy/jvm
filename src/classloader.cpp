@@ -325,6 +325,9 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 		for (auto f : java_class->super_class->fields) {
 			java_class->fields.insert(f);
 		}
+		for (auto f : java_class->super_class->static_fields) {
+			java_class->static_fields.insert(f);
+		}
 		mem_off = java_class->super_class->member_size;
 		static_off = java_class->super_class->static_size();;
 	}
@@ -351,6 +354,9 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 			}
 		}
 		int & off = f->is_static()? static_off : mem_off;
+		if (f->name->equals("reflectionFactory")) {
+			//throw std::runtime_error(java_class->name->c_str());
+		}
 		if (f->is_static()) {
 			off = static_off;
 			java_class->static_fields[f->name->c_str()] = f;

@@ -23,9 +23,10 @@ int log::trace(const char * f, ...)
 	
 int logstream::printf(const char * f, ...)
 {
+
 	int ret = 0;
 	BUFFER_MSG(tmp, 1024, ret);
-	if (ret < n-p) {
+	if (ret < n-p - 1) {
 		print<const char*>(tmp);
 	}
 	return ret;

@@ -135,8 +135,7 @@ jvalue frame::native()
 	}
 	if (!fn) {
 		//后面改成抛异常
-		printf("native method %s not found\n",vm_native::trans_method_name(current_method).c_str());
-		throw std::runtime_error("native method");
+		throw "java/lang/UnsatisfiedLinkError";
 	}
 
 	uint32_t arg_count = current_method->arg_types.size() + 2;//Env指针,this/class指针
@@ -194,7 +193,7 @@ jvalue frame::native()
 	if (current_method->ret_type == T_VOID) {
 		ret_type = &ffi_type_void;
 	}else {
-		log::debug("return type %s", type_text[current_method->ret_type]);
+		//log::debug("return type %s", type_text[current_method->ret_type]);
 		fflush(stdout);
 		ret_type = (ffi_type*)ts[current_method->ret_type - T_BOOLEAN];
 	}
@@ -216,6 +215,9 @@ void frame::throw_exception(const char * name)
 
 frame::~frame()
 {
+	if (locals) delete locals;
+	if (stack) delete stack;
+
 }
 
 void frame::print_stack() 

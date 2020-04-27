@@ -90,8 +90,10 @@ NATIVE jreference java_lang_Class_getDeclaredConstructors0(environment * env, jr
 			}
 		}
 		env->set_object_field(a, param_types, ps);
-		env->set_object_field(a, modifiers, con->access_flag);
-		printf("set %d modifiers %d\n", a, con->access_flag);
+		jvalue mdf;
+		mdf.i = con->access_flag;
+		env->set_object_field(a, modifiers, mdf.i);
+		printf("set %d modifiers %d\n", a, mdf.i);
 		env->set_object_field(a, clazz, cls);
 		printf("set %d clazz %d\n", a, cls);
 		env->set_array_element(ret, idx ++, a);
@@ -128,4 +130,13 @@ NATIVE jint java_lang_Class_getModifiers(environment * env, jreference cls)
 {
 	claxx * meta = env->get_vm()->get_class_loader()->claxx_from_mirror(cls);
 	return meta->access_flag;
+}
+
+NATIVE jreference java_lang_Class_getSuperclass(environment * env, jreference cls)
+{
+	claxx * meta = claxx::from_mirror(cls, env->get_thread());
+	if (meta->super_class) {
+		return meta->super_class->mirror;
+	}
+	return null;
 }

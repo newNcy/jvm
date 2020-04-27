@@ -58,7 +58,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 				break;
 			case BIPUSH:
 					{
-						u1 v = pc.get<u1>();
+						jint v = pc.get<u1>();
 						stack->push(v);
 						log::bytecode(this, op, "bipush ", v);
 					}
@@ -110,16 +110,16 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 				break;
 			case ILOAD:
 				{
-					u1 index = pc.get<u1>();
+					jint index = pc.get<u1>();
 					stack->push(locals->get<jint>(index));
 					log::bytecode(this, op, "iload", index);
 				}
 				break;
 			case LLOAD:
 				{
-					u1 index = pc.get<u1>();
-					log::debug("lload %d\n", index);
+					jint index = pc.get<u1>();
 					stack->push(locals->get<jlong>(index));
+					log::bytecode(this, op, "lload", index);
 				}
 				break;
 			case ILOAD_0:
@@ -144,8 +144,8 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 			case LLOAD_2:
 			case LLOAD_3:
 				{
-					u1 index = op - LLOAD_0;
-					log::debug("lload_%d\n", index);
+					jint index = op - LLOAD_0;
+					log::bytecode(this, op, "lload", index);
 					stack->push(locals->get<jlong>(index));
 				}
 				break;
@@ -154,7 +154,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 			case FLOAD_2:
 			case FLOAD_3: 
 				{
-					u1 index = op - FLOAD_0;
+					jint index = op - FLOAD_0;
 					stack->push(locals->get<jfloat>(index));
 					log::bytecode(this, op, "fload ", locals->get<jfloat>(index));
 				}
@@ -175,7 +175,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					jreference ref = stack->pop<jreference>();
 					jint value = current_thread->get_env()->get_array_element(ref, index);
 					stack->push(value);
-					log::debug("iaload %d[%d] -> %d\n", ref, index, value);
+					log::bytecode(this, op, "iaload", value, "from", ref, '[', index, ']');
 				}
 				break;
 			case AALOAD:
@@ -183,7 +183,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					jint index = stack->pop<jint>();
 					jreference array = stack->pop<jreference>();
 					jreference e = current_thread->get_env()->get_array_element(array, index);
-					log::debug("aaload get %d[%d] -> %u\n", array, index, e);
+					log::bytecode(this, op, "aaload", e, "from", array, '[', index, ']');
 					stack->push(e);
 				}
 				break;
@@ -197,18 +197,22 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 				break;
 			case ISTORE:
 				{
-					u1 index = pc.get<u1>();
+					jint index = pc.get<u1>();
 					locals->put(stack->pop<jint>(), index); 
 					log::bytecode(this, op, "istore", index);
 				}
 				break;
-			case LSTORE:
-				locals->put(stack->pop<jlong>(),pc.get<u1>());
-				log::debug("lstore\n");
+			case LSTORE: 
+				{
+					jint index = pc.get<u1>();
+					jreference obj = stack->pop<jlong>();
+					locals->put(obj, index);
+					log::bytecode(this, op, "lstore", obj, "to", index);
+				}
 				break;
 			case ASTORE:
 				{
-					u1 index = pc.get<u1>();
+					jint index = pc.get<u1>();
 					jreference obj = stack->pop<jreference>();
 					locals->put(obj, index);
 					log::bytecode(this, op, "astore", obj, "to", index);
@@ -228,7 +232,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 				{
 					jfloat value = stack->pop<jfloat>();
 					locals->put(value, op - FSTORE_0);
-					log::debug("fstore_%d %f\n",op - FSTORE_0, value);
+					log::bytecode(this, op, "fstore", value, "to" ,op - FSTORE_0, value);
 				}
 				break;
 			case ASTORE_0:
@@ -243,7 +247,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					jint value = stack->pop<jint>();
 					jint index = stack->pop<jint>();
 					jreference arrayref = stack->pop<jreference>();
-					log::debug("iastore %d[%d] = %d\n", arrayref, index, value);
+					log::bytecode(this, op, "iastore", value, "to", arrayref, '[', index, ']');
 					current_thread->get_env()->set_array_element(arrayref, index, value);
 				}
 				break;
@@ -252,7 +256,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					jint value = stack->pop<jint>();
 					jint index = stack->pop<jint>();
 					jreference arrayref = stack->pop<jreference>();
-					log::debug("aastore %d[%d] = %d\n", arrayref, index, value);
+					log::bytecode(this, op, "aastore", value, "to", arrayref, '[', index, ']');
 					current_thread->get_env()->set_array_element(arrayref, index, value);
 				}
 				break;
@@ -266,12 +270,12 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 				}
 				break;
 			case POP:
-				log::debug("pop\n");
 				stack->pop<jint>();
+				log::bytecode(this, op, "pop");
 				break;
 			case POP2:
-				log::debug("pop2\n");
 				stack->pop<jlong>();
+				log::bytecode(this, op, "pop2");
 				break;
 			case DUP:
 				{
@@ -284,15 +288,15 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 				{
 					jint v1 = stack->pop<jint>();
 					jint v2 = stack->pop<jint>();
-					log::debug("dup_x1\n");
+					log::bytecode(this, op, "dup_x1", v2, v1);
 					stack->push(v1, v2, v1);
 				}
 				break;
 			case DUP2:
 				{
-					log::debug("dup2\n");
 					jlong top = stack->top<jlong>();
 					stack->push(top);
+					log::bytecode(this, op, "dup2", top);
 				}
 				break;
 			case IADD:
@@ -300,7 +304,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					jint b = stack->pop<jint>();
 					jint a = stack->pop<jint>();
 					stack->push<jint>(a+b);
-					log::debug("iadd %d %d\n", a, b);
+					log::bytecode(this, op, "iadd", a, b);
 				}
 				break;
 			case LADD:
@@ -308,7 +312,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					jlong b = stack->pop<jlong>();
 					jlong a = stack->pop<jlong>();
 					stack->push<jlong>(a+b);
-					log::debug("ladd %ld %ld\n", a, b);
+					log::bytecode(this, op, "ladd", a, b);
 				}
 				break;
 			case ISUB:
@@ -323,15 +327,15 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 				{
 					jfloat v2 = stack->pop<jfloat>();
 					jfloat v1 = stack->pop<jfloat>();
-					log::debug("fmul %f %f\n", v1, v2);
 					stack->push(v1*v2);
+					log::bytecode(this, op, "fmul", v1, v2);
 				}
 				break;
 			case FDIV:
 				{
 					jfloat v2 = stack->pop<jfloat>();
 					jfloat v1 = stack->pop<jfloat>();
-					log::debug("fdiv %f %f\n", v1, v2);
+					log::bytecode(this, op, "fdiv", v1, v2);
 					if (v2 == 0) {
 						stack->push<jfloat>(0x7fc00000);
 					}else {
@@ -344,14 +348,14 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					jint b = stack->pop<jint>();
 					jint a = stack->pop<jint>();
 					stack->push<jint>(a-(a/b)*b);
-					log::debug("irem %d %d\n", a, b);
+					log::bytecode(this, op, "irem", a, b);
 				}
 				break;
 			case INEG:
 				{
 					jint b = stack->pop<jint>();
 					stack->push<jint>(-b);
-					log::debug("irem %d \n", b);
+					log::bytecode(this, op, "ineg", b);
 				}
 				break;
 			case ISHL:
@@ -360,7 +364,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					jint v1 = stack->pop<jint>();
 					jint s = v2 & 0x3f;
 					jint result = v1 << s;
-					log::debug("lshl %ld %d = %ld\n", v1, v2, result);
+					log::bytecode(this,	op, "lshl", v1, s, result);
 					stack->push(result);
 				}
 				break;
@@ -370,7 +374,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					jlong v1 = stack->pop<jlong>();
 					jint s = v2 & 0x3f;
 					jlong result = v1 << s;
-					log::debug("lshl %ld %d = %ld\n", v1, v2, result);
+					log::bytecode(this, op, "lshl", v1, s, result);
 					stack->push(result);
 				}
 				break;
@@ -380,7 +384,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					jlong v1 = stack->pop<jint>();
 					jint s = v2 & 0x3f;
 					jint result = v1 >> s;
-					log::debug("%d >> %d = %ld\n", v1, s, result);
+					log::bytecode(this, op, "ishr", v1, s, result);
 					stack->push(result);
 				}
 				break;
@@ -389,7 +393,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					jint v2 = stack->pop<jint>();
 					jint v1 = stack->pop<jint>();
 					jint result = v1 | v2;
-					log::debug("lshl %ld %d = %ld\n", v1, v2, result);
+					log::bytecode(this, op, "lshl", v1, v2, result);
 					stack->push(result);
 				}
 				break;
@@ -402,7 +406,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					if (v1 < 0) {
 						result += 2<<(~s);
 					}
-					log::debug("iushr %d %d = %d\n", v1, v2, result);
+					log::bytecode(this, op, "iushr", v1, s, result);
 					stack->push(result);
 				}
 				break;
@@ -429,16 +433,16 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					jint a = stack->pop<jint>();
 					jint b = stack->pop<jint>();
 					jint result = a ^ b;
-					log::debug("ixor %d %d = %d\n", a, b, result);
+					log::bytecode(this, op, "ixor", a, b, result);
 					stack->push(result);
 				}
 				break;
 			case IINC:
 				{
-					u1 index = pc.get<u1>();
+					jint index = pc.get<u1>();
 					char c = pc.get<char>();
 					jint li = locals->get<jint>(index);
-					log::debug("iinc index %d %d += %d\n", index, li, c);
+					log::bytecode(this, op, "iinc", index);
 					li += c;
 					locals->put(li, index);
 				}
@@ -464,15 +468,15 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					if (v.i != 0x7fc00000) { //NaN
 						result = v.f;
 					}
-					log::debug("f2i %f\n", v);
 					stack->push(result);
+					log::bytecode(this, op, "f2i", v.f, result);
 				} 
 				break;
 			case I2C:
 				{
 					jint v = stack->pop<jint>();
 					stack->push<jint>(v);
-					log::debug("i2c %d\n", v);
+					log::bytecode(this, op, "i2c", v);
 				} 
 				break;
 			case FCMPL:
@@ -625,22 +629,20 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					}else {
 						pc.pos_offset(4-pc.pos()%4);
 					}
-					log::debug("addr:%d\n", pc.pos());
 					jint default_value = pc.get<jint>();
 					jint npairs = pc.get<jint>();
 					bool matched = false;
 
-					log::debug("switch %d defaultvalue:%d npairs:%d\n", key, default_value, npairs);
+					log::bytecode(this, op, "switch");
 #if 1
 					//case是排好序的，可以折半搜索
 					jint start = pc.pos(), end = start + (npairs-1)*8;
-					log::debug("[%d %d]\n", start, end);
 					while (start <= end) {
 						jint mid = (start + end)/2;
 						pc.pos(mid);
 						jint match = pc.get<jint>();
 						jint pos = pc.get<jint>();
-						printf("[%d] %c == %c? goto %d\n", mid, key, match, pos);
+						log::bytecode(this, op, "case", match, ":", current_pc + pos);
 						if (match == key) {
 							pc.pos(current_pc + pos);
 							matched = true;
@@ -772,14 +774,15 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 						}
 						current_thread->call(to_call);
 					}else {
+
 					}
 				}
 				break;
 			case INVOKEINTERFACE:
 				{
 					u2 index = pc.get<u2>();
-					u1 count = pc.get<u1>();
-					u1 zero = pc.get<u1>();
+					jint count = pc.get<u1>();
+					jint zero = pc.get<u1>();
 					method * interface_method = current_const_pool->get_method(index, current_thread);
 					log::bytecode(this, op, "invokeinterface", interface_method->owner->name->c_str(), interface_method->name->c_str(), interface_method->discriptor->c_str(), index, count, zero);
 					current_thread->call(interface_method, nullptr, true);
@@ -858,13 +861,13 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 				break;
 			case MONITERENTER:
 				{
-					log::debug("monitor enter\n");
+					log::bytecode(this, op, "monitor enter", stack->top<jreference>());
 					stack->pop<jreference>();
 				}
 				break;
 			case MONITEREXIT:
 				{
-					log::debug("monitor exit\n");
+					log::bytecode(this, op, "monitor exit", stack->top<jreference>());
 					stack->pop<jreference>();
 				}
 				break;

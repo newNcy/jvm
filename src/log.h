@@ -46,7 +46,7 @@ struct logstream
 
 	int printf(const char * f, ...);
 	
-	void print(){}
+	void print() {}
 	template <typename T>
 	void print(T t);
 
@@ -54,6 +54,7 @@ struct logstream
 	void print (T t, Args ... args) 
 	{
 		print(t);
+		print(' ');
 		print(args...);
 	}
 
@@ -64,10 +65,21 @@ struct logstream
 };
 
 template <>
+inline void logstream::print(int i)
+{
+	printf("%d",i);
+}
+template <>
 inline void  logstream::print(char c)
 {
-	if (p < n) {
-		buf[p ++] = c;
+	if (0x20 <= c && c <= 0x7e) {
+		if (p < n - 3) {
+			buf[p ++] = c;
+		}
+	} else {
+		print('\'');
+		print<int>(c);	
+		print('\'');
 	}
 }
 
@@ -82,7 +94,7 @@ inline void logstream::print(const char *s)
 {
 	if (s) {
 		int i = 0; 
-		int left = n - p ;
+		int left = n - p - 3;
 		while (*(s+i) && i < left) {
 			print(s[i++]);
 		}
@@ -92,58 +104,51 @@ inline void logstream::print(const char *s)
 template <>
 inline void logstream::print(const std::string & s)
 {
-	printf("%s ", s.c_str());
-}
-
-template <>
-inline void logstream::print(std::string s)
-{
 	print(s.c_str());
 }
 
-	
-template <>
-inline void logstream::print(int i)
+	template <>
+inline void logstream::print(std::string s)
 {
-	printf("%d ",i);
+	print<const std::string & >(s);
 }
 
 template <>
 inline void logstream::print(unsigned int i)
 {
-	printf("%d ",i);
+	printf("%d",i);
 }
 
 
 template <>
 inline void logstream::print(short i)
 {
-	printf("%d ",i);
+	printf("%d",i);
 }
 
 template <>
 inline void logstream::print(unsigned short i)
 {
-	printf("%d ",i);
+	printf("%d",i);
 }
 
 template <>
 inline void logstream::print(long i)
 {
-	printf("%d ",i);
+	printf("%d",i);
 }
 
 
 template <>
 inline void logstream::print(float i)
 {
-	printf("%f ",i);
+	printf("%f",i);
 }
 
 template <>
 inline void logstream::print(double i)
 {
-	printf("%lf ",i);
+	printf("%lf",i);
 }
 
 
@@ -153,32 +158,40 @@ void log::bytecode (frame * f, u1 op, const char * text, Args ... args)
 	struct winsize size;
 	ioctl(STDOUT_FILENO, TIOCGWINSZ, &size);
 
-	logstream ss(2*size.ws_col);
-	ss.printf("[%s.%s::%05x] %s ", f->current_class->name->c_str(), f->current_method->name->c_str(), f->current_pc, text);
-	ss.print(args...);
-	
-	logstream right(2*size.ws_col);
-	for (auto i = f->stack->top_pos() - 1; i > f->stack->begin()-1; i --) {
-			right.printf(" %d",*i);
+	int sz = size.ws_col;
+	if (!sz || sz > 10000) {
 	}
-	right.printf(" [%d/%ld] ", f->stack->top_pos() - f->stack->begin(), f->stack->size());
+	sz = 245;
+
+	logstream ss(2*sz);
+	ss.printf(" [%s.%s::%05d] %s ", f->current_class->name->c_str(), f->current_method->name->c_str(), f->current_pc, text);
+	ss.print(args...);
+	ss.print(' ');
+
+	logstream right(2*sz);
+	for (auto i = f->stack->top_pos() - 1; i > f->stack->begin()-1; i --) {
+		right.printf(" %d",*i);
+	}
+	right.printf(" [%d/%ld]", f->stack->top_pos() - f->stack->begin(), f->stack->size());
 	if (f->locals->size()) {
-		right.print("|");
+		right.print(" | ");
 		for (auto i : *f->locals) {
 			right.printf("%d ", i);
 		}
 		right.print("|");
 	}
 
-	int space = size.ws_col - right.p - 1;
+	int space = sz - right.p - 1;
 	for (int i = ss.p ; i <  space; i++) {
 		if (i%3 == 0) {
-			ss.printf("-");
+			ss.print('-');
 		}else {
-			ss.printf(" ");
+			ss.print(' ');
 		}
 	}
 
 	ss.printf("%s", right.buf);
+	//printf("%s\n", ss.buf);
+
 	trace(ss.buf);
 }
