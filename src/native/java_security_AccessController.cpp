@@ -5,8 +5,7 @@
 NATIVE jreference java_security_AccessController_doPrivileged(environment * env, jreference cls, jreference obj)
 {
 	printf("java_security_AccessController_doPrivileged %d %d\n", cls,obj);
-	jreference objc = env->get_class(obj);
-	methodID m = env->lookup_method(objc, "run", "()Ljava/lang/Object;"); 
+	methodID m = env->lookup_method_by_object(obj, "run", "()Ljava/lang/Object;"); 
 	return env->callmethod(m, obj);
 }
 

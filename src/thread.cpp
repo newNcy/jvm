@@ -3,8 +3,10 @@
 #include "attribute.h"
 #include "class.h"
 #include "classfile.h"
+#include "frame.h"
 #include "interpreter.h"
 #include "jvm.h"
+#include "log.h"
 #include "memery.h"
 #include "native.h"
 #include "object.h"
@@ -17,45 +19,9 @@
 #include <ffi-x86_64.h>
 #include <ffi.h>
 #include <stdexcept>
+#include <stdio.h>
 #include <utility>
 #include <vector>
-
-frame::frame(frame * caller, method * to_call, thread * context ):caller_frame(caller), current_method(to_call), current_class(to_call->owner)
-{
-	if (!current_class) { 
-		return;
-	}
-	current_thread = context;
-	current_const_pool = current_class->cpool;
-	auto code_it = current_method->attributes.find("Code");
-	if (code_it == current_method->attributes.end()) {
-		stack = new operand_stack(2);
-		locals = new any_array(2);
-		return;
-	}
-	code = (code_attr*)code_it->second;
-	
-	pc.set_buf((const char*)code->code, code->code_length);
-	stack = new operand_stack(code->max_stacks);
-	locals = new any_array(code->max_locals);
-
-	auto locals_table_it = current_method->attributes.find("LocalVariableTable");
-	if (locals_table_it != current_method->attributes.end()) {
-		locals_table = static_cast<local_variable_table_attr*>(locals_table_it->second);
-	}
-	gettimeofday(&start_time, nullptr);
-
-}
-
-void frame::throw_exception(const char * name)
-{
-	exception_occured = true;
-	runtime_error = name;
-}
-frame::~frame()
-{
-}
-
 
 void thread::run()
 {
@@ -80,77 +46,49 @@ bool thread::handle_exception()
 	jreference e = current_frame->stack->pop<jreference>();
 	object * obj = memery::ref2oop(e);
 	for (;current_frame;) {
-		for (exception & e : current_frame->code->exceptions) {
+		for (exception & eh : current_frame->code->exceptions) {
 			u2 cur_pc = current_frame->pc.pos();
-			if (e.start_pc <= cur_pc && cur_pc <= e.end_pc) {
-				current_frame->pc.pos( e.handler_pc);
-				current_frame->stack->push(e);
-				printf("%s handle by %s.%s:%s\n", obj->meta->name->c_str(), 
-						current_frame->current_class->name->c_str(), 
-						current_frame->current_method->name->c_str(), 
-						current_frame->current_method->discriptor->c_str());
-				return true;
+			if (eh.start_pc <= cur_pc && cur_pc <= eh.end_pc) {
+				auto type = current_frame->current_const_pool->get_class(eh.catch_type, this);
+				if (type == obj->meta) {
+					current_frame->pc.pos( eh.handler_pc);
+					current_frame->stack->push(e);
+					current_frame->interpreter(
+							current_frame->current_class->name->c_str(),
+							current_frame->current_method->name->c_str(),
+							current_frame->current_method->discriptor->c_str()
+							);
+					printf("%s handle by %s.%s:%s\n", obj->meta->name->c_str(), 
+							current_frame->current_class->name->c_str(), 
+							current_frame->current_method->name->c_str(), 
+							current_frame->current_method->discriptor->c_str());
+					return true;
+				}
 			}
 		}
-		printf("%s unhandle by %s.%s:%s\n", obj->meta->name->c_str(), 
-				current_frame->current_class->name->c_str(), 
-				current_frame->current_method->name->c_str(), 
-				current_frame->current_method->discriptor->c_str());
 		unhandle_methods.push_back(std::make_pair(current_frame->current_method,current_frame->current_pc));
 		current_frame = current_frame->caller_frame;
 		pop_frame();
 	}
 	printf("unhandle exception %s at:\n", obj->meta->name->c_str());
-	for (auto && m : unhandle_methods) {
-		auto ln = m.first->attributes.find("LineNumberTable");
-		printf("in %s.%s ",m.first->owner->name->c_str(), m.first->name->c_str());
-		if (ln != m.first->attributes.end()) {
-			auto table = static_cast<line_number_table_attr*>(ln->second)->line_number_table;
-			auto line = table.find(m.second);
-			if (line != table.end()) {
-				printf("%d ", line->second);
-			}
+	for (auto && call : unhandle_methods) {
+		auto m = call.first;
+		auto pc = call.second;
+		auto source_attr_it = m->owner->attributes.find("SourceFile");
+		auto source = m->owner->cpool->get(static_cast<source_attr*>( source_attr_it->second)->sourcefile_index);
+		printf("%s.%s:%d ", m->owner->name->c_str(), m->name->c_str(), pc);
+		if (source) {
+			printf("%s", source->utf8_str->c_str());
+		}else {
+			printf("??????");
 		}
 		printf("\n");
 	}
+	exit(0);
 	return false;
 }
 
-void frame::print_stack() 
-{
-	printf("stack\t[%d/%d] ",stack->top_ptr, stack->size());
-	if (stack->begin() != stack->end()) printf("|");
-	for (any_array::iterator i = stack->begin(); i < stack->end(); i++) {
-		if (stack->types[i-stack->begin()] == T_FLOAT) {
-			printf("%f|", *(jfloat*)i);
-		}else if (stack->types[i-stack->begin()] == T_DOUBLE) {
-			printf("%lf|", *(jdouble*)i);
-			i++;
-		}else {
-			printf("%d|", *(jint*)i);
-		}
-	}
-	printf("\n");
-}
-void frame::print_locals()
-{
-	printf("locals\t[%d] ", locals->size());
-	if (!locals->size()) {
-		printf("\n");
-		return;
-	}
-	if (locals->begin() != locals->end()) printf("|");
-	int idx = 0;
-	for (any_array::iterator i = locals->begin(); i < locals->end(); i++) {
-		if (locals_table) {
-			printf("a%s:", current_const_pool->get(locals_table->local_variable_table[idx].name_index)->utf8_str->c_str());
-		}
-		printf("%d|", *i);
-	}
-	printf("\n");
-}
-
-jvalue thread::call_native(method * m,operand_stack * args)
+jvalue thread::call_native(method * m, array_stack * args)
 {
 	printf("try to call native method %s\n",vm_native::trans_method_name(m).c_str());
 	vm_native::native_metod fn = m->native_method;
@@ -165,7 +103,7 @@ jvalue thread::call_native(method * m,operand_stack * args)
 		return 0;
 	}
 
-	uint32_t arg_count = m->arg_types.size() + 1 + m->is_static(); //Env指针,this/class指针
+	uint32_t arg_count = m->arg_types.size() + 2;//Env指针,this/class指针
 	ffi_type ** arg_types = (ffi_type**)alloca(sizeof(ffi_type)*arg_count);
 	void ** arg_ptrs = (void**)alloca(sizeof(void*)*arg_count);
 	void * ts [] = {
@@ -184,14 +122,15 @@ jvalue thread::call_native(method * m,operand_stack * args)
 	arg_ptrs[0] = alloca(arg_types[0]->size);
 	*(environment**)arg_ptrs[0] = get_env();
 
+	jreference class_or_this = m->is_static()?m->owner->mirror : args->pop<jreference>();
+	args->print();
 	int idx = 1;
-	if (m->is_static()) {
-		arg_types[1] = &ffi_type_uint32;
-		arg_ptrs[1] = alloca(arg_types[1]->size);
-		*(jreference*)arg_ptrs[1] = m->owner->mirror;
-		idx ++;
-	}
+	arg_types[1] = &ffi_type_uint32;
+	arg_ptrs[1] = alloca(arg_types[1]->size);
+	*(jreference*)arg_ptrs[1] = class_or_this;
+	idx ++;
 	for (auto & t : m->arg_types) {
+		printf("put arg %d\n", t);
 		arg_types[idx] = (ffi_type*)ts[t-T_BOOLEAN];
 		arg_ptrs[idx] = alloca(arg_types[idx]->size);
 		if (t == T_BOOLEAN)		*(jboolean*)arg_ptrs[idx] = args->pop<jboolean>();
@@ -203,8 +142,11 @@ jvalue thread::call_native(method * m,operand_stack * args)
 		else if (t == T_INT)	*(jint*)arg_ptrs[idx] = args->pop<jint>();
 		else if (t == T_LONG)	*(jlong*)arg_ptrs[idx] = args->pop<jlong>();
 		else if (t == T_OBJECT)	*(jreference*)arg_ptrs[idx] = args->pop<jreference>();
+		else {
+		}
 		idx ++;
 	}
+	fflush(stdout);
 	ffi_type * ret_type = nullptr;
 	if (m->ret_type == T_VOID) {
 		ret_type = &ffi_type_void;
@@ -230,38 +172,96 @@ jvalue thread::call_native(method * m,operand_stack * args)
 
 
 
-jvalue thread::call(method * m, operand_stack * args, bool is_interface, bool call_in_native)
+/*
+ * 任何方法调用都会经过这个
+ */
+jvalue thread::call(method * m, array_stack * args, bool is_interface, bool call_in_native)
 {
 	if (!m) return 0; 
 	if (!args && current_frame) {
 		args = current_frame->stack;
 	}
 
-	fprintf(stderr, "%s %s.%s \n", m->owner->name->c_str(), m->name->c_str(), m->discriptor->c_str());
+	/*
+	 * 把参数逆转一下
+	 */
 
-	operand_stack * temp_stack = nullptr;
-	if (args) {
-		temp_stack = new operand_stack(args->size());
-		for (int idx = m->arg_types.size()-1; idx >= 0; idx --) {
-			if (m->arg_types[idx] == T_LONG || m->arg_types[idx] == T_DOUBLE)  temp_stack->push(args->pop<jlong>());
-			else temp_stack->push(args->pop<jint>());
+	/*
+	 * 处理interface方法
+	 */
+	if ((is_interface || m->is_abstract()) && args) {
+		jreference this_ref = args->get<jreference>(args->top_pos() - m->arg_space - 1 - args->begin());
+		m = static_cast<method*>(get_env()->lookup_method_by_object(this_ref, m->name->c_str(), m->discriptor->c_str()));
+	}
+
+	current_frame = new frame(this, m, args);
+	jvalue ret = 0;
+
+	try {
+		if (m->is_native()) {
+			ret = current_frame->native();
+		}else {
+			ret = current_frame->interpreter(m->owner->name->c_str(), m->name->c_str(), m->discriptor->c_str());
 		}
-		printf("with args(");
-		int idx = m->arg_types.size() - 1;
+	}catch (const char * e) {
+		throw_exception_to_java(e);
+	}
+	frame * return_frame = current_frame->caller_frame;
+	if (m->ret_type != T_VOID && !return_frame->current_method->is_native()) {
+		if (array::slot_need2(m->ret_type) == array::slot_need<jlong>::value) {
+			return_frame->stack->push(ret.j);
+			log::trace("%s.%s.%s returns %ld", m->owner->name->c_str(), m->name->c_str(), m->discriptor->c_str(), return_frame->stack->top<jlong>());
+		}else {
+			return_frame->stack->push(ret.i);
+			log::trace("%s.%s.%s returns %d", m->owner->name->c_str(), m->name->c_str(), m->discriptor->c_str(), return_frame->stack->top<jint>());
+		}
+	}
+	pop_frame();
+
+	return ret;
+#if 0
+		temp_stack->print();
+		int id = 1;
+		printf("with %lu args(", m->arg_types.size());
 		for (auto t : m->arg_types) {
-			printf(" %s:", type_text[t]);
-			if (t == T_FLOAT) {
-				printf("%f ", temp_stack->get<jfloat>(idx));
+			printf("%d.%d", id ++, idx);
+			if (t == T_OBJECT) {
+				jreference obj = temp_stack->get<jreference>(--idx);
+				object * oop = memery::ref2oop(obj);
+				printf("ref(%d)",obj);
+				fflush(stdout);
+				if (oop) {
+					printf(" %s:", oop->meta->name->c_str());
+					if (oop->meta->name->equals("java/lang/String")) {
+						printf("%s ", get_env()->get_utf8_string(obj).c_str());
+					}else if (oop->meta->name->equals("java/lang/Class")) {
+						printf("%s ", oop->meta->loader->claxx_from_mirror(obj)->name->c_str());
+					}else {
+						printf("%d ", obj);
+					}
 			}else {
-				printf("%d ", temp_stack->get<jint>(idx));
+					printf("null ");
+				}
+			}else {
+				printf(" %s:", type_text[t]);
+				if (t == T_FLOAT) {
+					printf("%f ", temp_stack->get<jfloat>(--idx));
+				}else if (t == T_DOUBLE) {
+					printf("%lf ", temp_stack->get<jdouble>(idx-2));
+					idx -= 2;
+				}else if (t == T_LONG) {
+					printf("%ld ", temp_stack->get<jlong>(idx-2));
+					idx -= 2;
+				}else {
+					printf("%d ", temp_stack->get<jint>(--idx));
+				}
 			}
-			idx--;
 		}
 		printf(")\n");
-	}
-	fflush(stdout);
+	}	
 
 	jvalue ret = 0;
+
 
 	if (is_interface || m->is_abstract()) {
 		jreference objref = temp_stack->top<jreference>();
@@ -269,6 +269,11 @@ jvalue thread::call(method * m, operand_stack * args, bool is_interface, bool ca
 		m = oop->meta->lookup_method(m->name->c_str(), m->discriptor->c_str());
 	}
 
+	//thi指针
+	if (!m->is_static() && temp_stack->top<jreference>() == null) {
+		fprintf(stderr, "%s 的指针空噜\n", m->owner->name->c_str());
+		throw_exception_to_java("java/lang/NullPointerException"); 
+	}
 	if (m->is_native()) {
 		ret = call_native(m, temp_stack);
 	}else {
@@ -279,6 +284,9 @@ jvalue thread::call(method * m, operand_stack * args, bool is_interface, bool ca
 		depth ++;
 		if (temp_stack) {
 			int idx = 0;
+			if (!m->is_static()) {
+				new_frame->locals->put(temp_stack->pop<jreference>(),idx ++);
+			}
 			for (auto  t : m->arg_types) {
 				if (t == T_LONG || t == T_DOUBLE) { 
 					new_frame->locals->put(temp_stack->pop<jlong>(),idx);
@@ -290,19 +298,12 @@ jvalue thread::call(method * m, operand_stack * args, bool is_interface, bool ca
 			}
 		}
 		try {
-			if (!m->is_static() && new_frame->locals->get<jreference>(0) == null) {
-				throw_exception_to_java("java/lang/NullPointerException"); 
-			}
 			current_frame->exec(m->owner->name->c_str(), m->name->c_str());
-		}catch(const char *  e) {
-			throw_exception_to_java(e);
-		}
 		depth --;
 
 		if (current_frame->exception_occured) {
 			handle_exception();
 		}else if (m->ret_type != T_VOID) {
-			try {
 				if (m->ret_type == T_LONG) {
 					ret = current_frame->stack->pop<jlong>();
 				}else if (m->ret_type == T_DOUBLE) {
@@ -312,9 +313,9 @@ jvalue thread::call(method * m, operand_stack * args, bool is_interface, bool ca
 				}else {
 					ret = current_frame->stack->pop<jint>();
 				}
-			}catch (const std::string & e)  {
-				throw_exception_to_java(e);
-			}
+		}
+		}catch(const char *  e) {
+			throw_exception_to_java(e);
 		}
 		pop_frame();
 	}
@@ -339,12 +340,14 @@ jvalue thread::call(method * m, operand_stack * args, bool is_interface, bool ca
 	}
 	if (temp_stack) delete temp_stack;
 	return ret;
+#endif
 }
 
 jreference thread::create_string(const std::string & bytes)
 {
 	return get_env()->create_string(bytes);
 }
+
 void thread::throw_exception_to_java(const std::string & name)
 {
 	claxx * c = get_env()->get_vm()->get_class_loader()->load_class(name, this);

@@ -35,6 +35,10 @@ struct code_attr: public attribute
 };
 
 
+struct source_attr : public attribute
+{
+	u2 sourcefile_index;
+};
 enum
 {
 	ITEM_Top,

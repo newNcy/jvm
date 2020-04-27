@@ -29,6 +29,7 @@ class jvm
 {
 	classloader * cloader = nullptr;
 	public:
+	std::map<std::string, jreference> primitive_types;
 	jreference thread_group = null;
 	std::vector<thread *> threads;
 	void on_global_signal(int, siginfo_t*, void*);
@@ -40,7 +41,7 @@ class jvm
 	void init_baisc_type();
 	void init(thread * current_thread);
 	~jvm();
-	void load_runtime(const std::string & runtime_path);
+	void load_jar(const std::string & runtime_path);
 	void run(const std::vector<std::string> & args);
 
 };

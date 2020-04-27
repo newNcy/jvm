@@ -1,4 +1,5 @@
 #include "class.h"
+#include "classfile.h"
 #include "classloader.h"
 #include "memery.h"
 #include "jvm.h"
@@ -15,7 +16,7 @@ claxx * const_pool::get_class(u2 idx, thread * current_thread)
 	if (!item || item->tag != CONSTANT_Class) return nullptr;
 	class_ref * sym_class = item->sym_class;
 	claxx * ret = owner->loader->load_class(sym_class->name->c_str(), current_thread);
-	if (ret->state < INITED) ret->loader->initialize_class(ret, current_thread);
+	//if (ret->state < INITED) ret->loader->initialize_class(ret, current_thread);
 	cache[idx] = ret;
 	return ret;
 }
@@ -77,7 +78,7 @@ jreference const_pool::get_string(u2 idx, thread * current_thread)
 	}
 	const_pool_item * item = get(idx);
 	if (!item || item->tag != CONSTANT_String) return 0;
-	jreference ret = current_thread->get_env()->create_string(item->utf8_str->c_str());
+	jreference ret = current_thread->get_env()->create_string_intern(item->utf8_str->c_str());
 	*((jreference*)&cache[idx]) = ret;
 	return ret;
 }
@@ -131,10 +132,33 @@ method * claxx::lookup_method(const std::string & name, const std::string & disc
 	return nullptr;
 }
 
+claxx * claxx::from_mirror(jreference cls, thread * current)
+{
+	return current->get_env()->get_vm()->get_class_loader()->claxx_from_mirror(cls);
+}
+std::vector<const method *> claxx::constructors()
+{
+	std::vector<const method *> ret;
+	auto constructors = methods.find("<init>");
+	if (constructors != methods.end()) {
+		for (auto m : constructors->second) {
+			ret.push_back(m.second);
+		}
+	}
+	return ret;
+}
+
 field * claxx::lookup_field(const std::string & name)
 {
+	//printf("lookup %s in %s\n",name.c_str(), this->name->c_str());
+	for (auto f : fields) {
+		//printf("%s %s : %p\n", f.first.c_str(), f.second->discriptor->c_str(), f.second);
+	}
 	auto res = fields.find(name);
 	if (res != fields.end()) return res->second;
+	
+	res = static_fields.find(name);
+	if (res != static_fields.end()) return res->second;
 	return nullptr;
 }
 field * claxx::lookup_static_field(const std::string & name)
@@ -160,7 +184,7 @@ claxx * claxx::get_array_claxx(thread * current_thread)
 	std::stringstream ss;
 	ss<<"[L";
 	ss<<this->name->c_str()<<";";
-	printf("array %s\n", ss.str().c_str());
+	//printf("array %s\n", ss.str().c_str());
 	return this->loader->load_class(ss.str().c_str(), current_thread);
 }
 
@@ -170,22 +194,23 @@ jreference claxx::instantiate(thread * current_thread)
 	return memery::alloc_heap_object(this);
 }
 
-symbol * make_symbol(const std::string & str)
+jreference array_claxx::instantiate(int length, thread * current_thread)
 {
-	symbol * sym = (symbol*)new char[sizeof(symbol) + str.length() + 1]();
-	strcpy((char*)sym->bytes, str.c_str());
-	return sym;
+	if (this->state < INITED) loader->initialize_class(this, current_thread);
+	return memery::alloc_heap_array(this, length);
 }
 
 array_claxx::array_claxx(const std::string & binary_name, classloader * ld, thread * current_thread)
 {
-	this->name = make_symbol(binary_name);
+	this->name = symbol_pool::instance().put(binary_name);
 	this->loader = ld;
 	int i = 0;
 	while (i < binary_name.length() && binary_name[i] == '[') i++,dimensions ++;
 	this->componen_type = ld->type_of_disc(binary_name[i]);
 	if (binary_name[i] == 'L') {
 		this->component = ld->load_class(std::string(binary_name, i, binary_name.length()), current_thread);
+	}else {
+		this->component = ld->load_class(&binary_name[i], current_thread);
 	}
 	super_class = ld->load_class("java/lang/Object", current_thread);
 	ld->create_mirror(this, current_thread);
@@ -194,8 +219,8 @@ array_claxx::array_claxx(const std::string & binary_name, classloader * ld, thre
 primitive_claxx::primitive_claxx(jtype t, classloader *ld):type(t)
 {
 	this->loader = ld;
-	this->name = make_symbol(std::string("") + type_disc[t]);
+	this->name = symbol_pool::instance().put(std::string("") + type_disc[t]);
 	ld->record_claxx(this);
 	ld->create_mirror(this, nullptr);
-	printf("primitive %s ref %d\n", this->name->c_str(), this->mirror);
+	//printf("primitive %s ref %d\n", this->name->c_str(), this->mirror);
 }

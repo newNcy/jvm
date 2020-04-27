@@ -1,5 +1,6 @@
 
 #2020-4-17 抛出java/lang/ClassCastException
+
 溯源
 1.[java/util/concurrent/atomic/AtomicReferenceFieldUpdater$AtomicReferenceFieldUpdaterImpl.<init>::00122] 0xa5 if_acmpeq 288 244
 2.288 244 分别从locals 2 6处取出
@@ -24,5 +25,17 @@ private void advance(){
 
 思路:
 1.看Properties中各个属性作用
-2.把分析的unicode string打印出来
+2.把分析的string打印出来
+#2020-4-21 sun.nio.cs.ext.ExtendedCharsets找不到
+sun.nio.cs.ext.ExtendedCharsets在charsets.jar里，但是java_lang_forName0里需要把sun.nio.cs.ext.ExtendedCharsets改成sun/nio/cs/ext/ExtendedCharsets
+
+#2020-4-23 执行和调用体系混乱，整理下结构
+
+约束
+1.对象中内存按照字段大小
+2.局部变量/栈中内存按照double/long两格子剩下一个格子
+3.每一次调用都生成frame，目前native没生成
+
+##设想
++ 不在call阶段处理是否native调用，放到frame::exec里,目前thread::call阶段
 

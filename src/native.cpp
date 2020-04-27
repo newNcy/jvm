@@ -1,5 +1,6 @@
 #include "native.h"
 #include "class.h"
+#include "frame.h"
 #include "memery.h"
 #include "object.h"
 #include "thread.h"
@@ -7,13 +8,14 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include "jvm.h"
 #include "classloader.h"
 #include "debug.h"
 
 jreference environment::string_intern(jreference jref)
 {
-	fieldID f = lookup_field(get_class(jref), "value");
+	fieldID f = lookup_field_by_class(get_class(jref), "value");
 	jreference value = get_object_field(jref, f);
 	char buff[1024] = {0};
 	for (int i = 0 ; i < array_length(value); i ++) {
@@ -24,8 +26,7 @@ jreference environment::string_intern(jreference jref)
 
 jreference environment::create_string_intern(const std::string & bytes)
 {
-	printf("intern %s\n", bytes.c_str());
-	fflush(stdout);
+	//printf("intern %s\n", bytes.c_str());
 	auto ret = interns.find(bytes);
 	if (ret != interns.end()) return ret->second;
 	jreference ref = create_string(bytes);
@@ -49,6 +50,21 @@ int unicode_length(const char * buf, int len)
 	}
 	return count;
 }
+	
+std::string environment::get_utf8_string(jreference ref)
+{
+	fieldID valueid = lookup_field_by_class(get_class(ref), "value");
+	jreference value = get_object_field(ref, valueid);
+	if (!value) return "";
+	std::vector<char> bytes;
+	int len = array_length(value);
+	for (int i = 0; i < len; i++) {
+		char c = get_array_element(value, i).c;
+		bytes.push_back(c);
+	}
+	bytes.push_back(0);
+	return std::string(&bytes[0]);
+}
 
 jchar utf8_to_unicode(const char * buf, int len, int & took)
 {
@@ -69,9 +85,10 @@ jchar utf8_to_unicode(const char * buf, int len, int & took)
 		}
 		return cur;
 }
+
 jreference environment::create_string(const std::string & bytes)
 {
-	printf("create string [%ld, %s]\n", bytes.length(), bytes.c_str());
+	//printf("create string [%ld, %s]\n", bytes.length(), bytes.c_str());
 	int length = unicode_length(bytes.c_str(), bytes.length());
 
 	function_time t(__PRETTY_FUNCTION__);
@@ -108,6 +125,7 @@ jreference environment::create_obj_array(jreference type, uint32_t length)
 void environment::set_object_field(jreference ref, fieldID f, jvalue v)
 {
 	object * oop = memery::ref2oop(ref);
+	auto rf = static_cast<field*>(f);
 	oop->set_field((field*)f, v);
 }
 
@@ -119,6 +137,9 @@ jvalue environment::get_object_field(jreference ref, fieldID f)
 
 jint environment::array_length(jreference ref)
 {
+	if (!ref) {
+		throw "java/lang/NullPointerException";
+	}
 	object * oop = memery::ref2oop(ref);
 	if (!oop->is_array()) {
 		printf("not an array\n");
@@ -136,6 +157,9 @@ void environment::set_array_element(jreference ref, jint index, jvalue v)
 jvalue environment::get_array_element(jreference ref, jint index)
 {
 	object * arr = memery::ref2oop(ref);
+	if (index >= arr->array_length()) {
+		throw "java/lang/ArrayIndexOutOfBoundsException";
+	}
 	return arr->get_element(index);
 }
 
@@ -145,28 +169,70 @@ jreference environment::get_class(jreference obj)
 	return oop->meta->mirror;
 }
 
-fieldID environment::lookup_field(jreference cls, const std::string & name)
+
+jreference environment::lookup_class(const std::string & name)
+{
+	claxx * c = get_vm()->get_class_loader()->load_class(name, get_thread());
+	if (c) return c->mirror;
+	return null;
+}
+
+fieldID environment::lookup_field_by_class(jreference cls, const std::string & name)
 {
 	claxx * meta = vm->get_class_loader()->claxx_from_mirror(cls);
-	printf("lookup field %s in %s\n", name.c_str(), meta->name->c_str());
 	return meta->lookup_field(name);
 }
 
+jreference environment::clone_object(jreference obj)
+{
+	if (!obj) return null;
+	object * oop = memery::ref2oop(obj);
+	if (!oop) return null;
 
-methodID environment::lookup_method(jreference cls, const std::string & name, const std::string & discriptor)
+	jreference ret = null;
+	if (oop->is_array()) {
+		int length = oop->array_length();
+		ret = oop->meta->instantiate(length, get_thread());
+		for (int i = 0 ; i < length; i++) {
+			set_array_element(ret, i, get_array_element(obj, i));
+		}
+	}else {
+		ret = oop->meta->instantiate(get_thread());
+		for (auto f : oop->meta->fields) {
+			set_object_field(ret, f.second, get_object_field(obj, f.second));
+		}
+	}
+	return ret;
+}
+
+fieldID environment::lookup_field_by_object(jreference obj, const std::string & name) 
+{
+	return lookup_field_by_class(get_class(obj), name);
+}
+
+methodID environment::lookup_method_by_class(jreference cls, const std::string & name, const std::string & discriptor)
 {
 	claxx * meta = vm->get_class_loader()->claxx_from_mirror(cls);
 	return meta->lookup_method(name, discriptor);
 }
-
-jvalue environment::callmethod(methodID m, jreference obj)
+methodID environment::lookup_method_by_object(jreference obj, const std::string & name, const std::string & discriptor) 
 {
-	operand_stack stack(1);
-	stack.push(obj);
-	return get_thread()->call(static_cast<method*>(m), &stack, false, true);
+	return lookup_method_by_class(get_class(obj), name, discriptor);
 }
+
+jvalue environment::callmethod(methodID m, array_stack & args)
+{
+	auto mh = static_cast<method*>(m);
+	return get_thread()->call(mh, &args, false, true);
+}
+
 NATIVE int Test_test(environment * env,jreference cls, int arg) 
 {
 	printf("Tes.test called arg:%d %d\n", cls, arg);
 	return arg * 2;
+}
+		
+void environment::dumpobj(jreference obj)
+{
+
 }

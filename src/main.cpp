@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string>
 #include <vector>
+#include "class.h"
+#include "frame.h"
 #include "jvm.h"
 #include <signal.h>
 
@@ -37,9 +39,14 @@ int main(int argc, char * argv[])
 	std::vector<std::string> args;
 	args.push_back(main_class_name);
 
+
 	//signal(SIGSEGV, sighandle);
 	//signal(SIGABRT, sighandle);
-	vm.load_runtime("rt.jar");
+#if 1
+	vm.load_jar("charsets.jar");
+	vm.load_jar("rt.jar");
+
 	vm.run(args);
+#endif
 	return 0;
 }

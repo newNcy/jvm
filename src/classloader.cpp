@@ -1,9 +1,11 @@
 #include "classloader.h"
+#include "attribute.h"
 #include "class.h"
 #include "classfile.h"
 #include "memery.h"
 #include <cstring>
 #include <cstdio>
+#include <sstream>
 #include <stdexcept>
 #include <utility>
 #include <zip.h>
@@ -83,7 +85,7 @@ class raw_const_pool
 			case CONSTANT_Float:
 				{
 					cp_float * num = (cp_float*)info;
-					ret->value.f = num->bytes;
+					ret->value.f = *(float*)&(num->bytes);
 				}
 				break;
 			case CONSTANT_Long:
@@ -95,7 +97,7 @@ class raw_const_pool
 			case CONSTANT_Double:
 				{
 					cp_double * num = (cp_double*)info;
-					ret->value.d = num->bytes;
+					ret->value.d = *(double*)&(num->bytes);
 				}
 				break;
 			case CONSTANT_NameAndType:
@@ -231,7 +233,7 @@ claxx * classloader::load_class(const std::string & name, thread * current_threa
 	claxx * ret = load_from_file(file_name, current_thread);
 	if (ret) return ret;
 
-	if (!rt_jar) return nullptr;
+	if (jars.empty()) return nullptr;
 
 	/*
 	   int count = zip_get_num_files(rt_jar);
@@ -241,12 +243,17 @@ claxx * classloader::load_class(const std::string & name, thread * current_threa
 	   */
 
 	struct zip_stat stat;
-	if (zip_stat(rt_jar, file_name.c_str(), ZIP_FL_UNCHANGED, &stat) != 0) {
-		//zip_close(rt_jar);
-		return nullptr;
+	zip * jar = nullptr;
+	for (auto j : jars) {
+		if (zip_stat(j, file_name.c_str(), ZIP_FL_UNCHANGED, &stat) == 0) {
+			jar = j;
+			break;
+		}
 	}
+	if (!jar) return nullptr;
+	
 	char * buf = new char[stat.size];
-	zip_file * class_file = zip_fopen(rt_jar,file_name.c_str(), ZIP_FL_UNCHANGED);
+	zip_file * class_file = zip_fopen(jar,file_name.c_str(), ZIP_FL_UNCHANGED);
 	if (!class_file) {
 		delete [] buf;
 		//zip_close(rt_jar);
@@ -330,7 +337,7 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 		f->discriptor = raw_pool.get<symbol>( stream.get<u2>());
 		f->type = type_of_disc(f->discriptor->at(0));
 		if (f->type == T_OBJECT) {
-			printf("field dis %s\n", f->discriptor->c_str());
+			//printf("field dis %s\n", f->discriptor->c_str());
 			//f->meta = load_class_from_disc(f->discriptor->c_str(), current_thread);
 		}else {
 			f->meta = load_class(f->discriptor->c_str(), current_thread);
@@ -366,8 +373,8 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 		m->access_flag = stream.get<u2>();
 		m->name = raw_pool.get<symbol>(stream.get<u2>());
 		m->discriptor = raw_pool.get<symbol>(stream.get<u2>());
-		if (!m->is_static()) m->arg_types.push_back(T_OBJECT); //this
-		m->ret_type = type_of_method_disc(m->discriptor, m->arg_types);
+		//if (!m->is_static()) m->arg_types.push_back(T_OBJECT); //this
+		m->ret_type = type_of_method_disc(m->discriptor, m->arg_types, m->param_types, m->arg_space);
 
 		//printf("method native:%d %s:%s arg count %ld\n", m->is_native(), m->name->c_str(), m->discriptor->c_str(), m->arg_types.size());
 		u2 attr_count = stream.get<u2>();
@@ -493,8 +500,12 @@ const_pool * classloader::parse_const_pool(byte_stream & stream, std::vector<cp_
 					cp_utf8 * utf8 = (cp_utf8*)memery::alloc_meta_space(sizeof(cp_utf8) + length + 1);
 					utf8->length = length;
 					stream.read(utf8->bytes, length);
+					symbol * h = symbol_pool::instance().instance().instance().put(utf8);
+					if (h != utf8) {
+						memery::dealloc_meta_space(utf8);
+					}
 					//printf("read utf8:%s\n",utf8->bytes);
-					info = utf8;
+					info = h;
 				}
 				break;
 			case CONSTANT_MethodHandle:
@@ -688,7 +699,9 @@ attribute * classloader::parse_attribute(byte_stream & stream,const raw_const_po
 		sig->signature_index = stream.get<u2>();
 		ret = sig;
 	}else if (name->equals("SourceFile")) {
-		stream.get<u2>();
+		source_attr * source = memery::alloc_meta<source_attr>();
+		source->sourcefile_index = stream.get<u2>();
+		ret = source;
 	}else if (name->equals("LineNumberTable")) {
 		line_number_table_attr * ln_table = memery::alloc_meta<line_number_table_attr>();
 		u2 table_length = stream.get<u2>();
@@ -853,7 +866,7 @@ claxx * classloader::load_class_from_disc(const std::string & disc, thread * cur
 	return load_class(std::string(disc, 1, disc.length() - 2), current_thread);
 }
 
-jtype classloader::type_of_method_disc(symbol * dis,std::vector<jtype> & args)
+jtype classloader::type_of_method_disc(symbol * dis,std::vector<jtype> & args, std::vector<symbol*> & param_types, uint32_t & space)
 {
 	int i;
 	for (i = 1 ; i < dis->length-1; i ++) {
@@ -862,20 +875,33 @@ jtype classloader::type_of_method_disc(symbol * dis,std::vector<jtype> & args)
 			i++;
 			break;
 		}
-		args.push_back(type_of_disc(dis->at(i)));
+		jtype t = type_of_disc(dis->at(i));
+		space ++;
+		if (type_size[t] > sizeof(jint)) space ++;
+		args.push_back(t);
+		std::string name;
 		if (dis->at(i) == 'L'){
+			int s = i + 1;
 			while (dis->at(i) != ';') i++;
-			continue;
-		}
-		if (dis->at(i) == '['){
-			i ++;
+			name = std::string(dis->c_str(), s, i - s);
+		}else if (dis->at(i) == '['){
+			int s = i;
 			while (dis->at(i) == '[') i ++;
 			if (dis->at(i) == 'L') {
 				while (dis->at(i) != ';') i++;
 			}
+			name = std::string(dis->c_str(), s, i - s + 1);
+		}else {
+			name = std::string(dis->c_str(), i, 1);
 		}
+		param_types.push_back(symbol_pool::instance().put(name));
 		
 	}
+#if 0
+	if (dis->equals("(Ljava/lang/Class;[Ljava/lang/Class;[Ljava/lang/Class;IILjava/lang/String;[B[B)V")) {
+		getchar();
+	}
+#endif
 	return type_of_disc(dis->at(i));
 }
 
@@ -904,7 +930,7 @@ void classloader::initialize_class(claxx * to_init, thread * current_thread)
 		
 void classloader::create_mirror(claxx * cls, thread * current_thread)
 {
-	printf("create mirror for %s\n", cls->name->c_str());
+	//printf("create mirror for %s\n", cls->name->c_str());
 	claxx * java_lang_Class = load_class("java/lang/Class", current_thread);
 	cls->mirror = memery::alloc_heap_object(java_lang_Class);
 	/*
@@ -933,7 +959,7 @@ array_claxx * classloader::create_array_claxx(const std::string & name, thread *
 	return  ret;
 }
 	
-void classloader::create_primitive(jtype t)
+jreference classloader::create_primitive(jtype t)
 {
-	new primitive_claxx(t, this);
+	return (new primitive_claxx(t, this))->mirror;
 }

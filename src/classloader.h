@@ -8,8 +8,7 @@ class classloader
 {
 	friend class jvm;
 	public:
-		std::string runtime_path;
-		void create_primitive(jtype);
+		jreference create_primitive(jtype);
 		claxx * load_class(const std::string & name, thread * current_thread);
 		claxx * load_class(byte_stream & stream, thread * current_thread);
 		claxx * load_class_from_disc(const std::string & disc, thread * current_thread);
@@ -17,7 +16,7 @@ class classloader
 		void load_jar(const std::string & path, thread * current_thread);
 		claxx *  load_from_file(const std::string & file, thread * current_thread);
 		jtype type_of_disc(char c);
-		jtype type_of_method_disc(symbol * dis,std::vector<jtype> & args);
+		jtype type_of_method_disc(symbol * dis,std::vector<jtype> & args, std::vector<symbol*> & param_types, uint32_t & space);
 
 		void link_class(claxx * to_link);
 		void initialize_class(claxx * to_init,thread *  current_thread);
@@ -34,5 +33,5 @@ class classloader
 		std::map <std::string, claxx *> loaded_classes;
 		std::map <jreference , claxx *> mirror_classes;
 		//thread * current_thread = nullptr;
-		zip * rt_jar = nullptr;
+		std::vector<zip*> jars;
 };

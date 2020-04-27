@@ -15,7 +15,6 @@ class claxx;
 class method;
 class field;
 class classloader;
-typedef cp_utf8 symbol;
 
 typedef uint8_t jboolean;
 typedef int8_t jbyte;
@@ -73,21 +72,11 @@ union jvalue
 	operator jreference()	{ return l; }
 };
 
-template <jtype T> struct jtype_traits;
-template <> struct jtype_traits<T_BOOLEAN>	{ using type = jboolean; };
-template <> struct jtype_traits<T_CHAR>		{ using type = jchar; };
-template <> struct jtype_traits<T_FLOAT>	{ using type = jfloat; };
-template <> struct jtype_traits<T_DOUBLE>	{ using type = jdouble; };
-template <> struct jtype_traits<T_BYTE>		{ using type = jbyte; };
-template <> struct jtype_traits<T_SHORT>	{ using type = jshort; };
-template <> struct jtype_traits<T_INT>		{ using type = jint; };
-template <> struct jtype_traits<T_LONG>		{ using type = jlong; };
-template <> struct jtype_traits<T_OBJECT>	{ using type = jreference; };
 
 
 template <typename T> struct jtype_value_traits		{ enum { type_value = T_VOID};};
 
-template <> struct jtype_value_traits<jboolean>		{ enum { type_value = T_VOID};};
+template <> struct jtype_value_traits<jboolean>		{ enum { type_value = T_BOOLEAN};};
 template <> struct jtype_value_traits<jchar>		{ enum { type_value = T_CHAR};};	
 template <> struct jtype_value_traits<jfloat>		{ enum { type_value = T_FLOAT};};
 template <> struct jtype_value_traits<jdouble>		{ enum { type_value = T_DOUBLE};};
@@ -98,8 +87,10 @@ template <> struct jtype_value_traits<jlong>		{ enum { type_value = T_LONG};};
 template <> struct jtype_value_traits<jreference>	{ enum { type_value = T_OBJECT};};
 
 const static uint32_t type_size[] = {0,0,0,0, 1, 2, 4, 8, 1, 2, 4, 8, 4};
+
+
 const static char type_disc[] = {'V',0,0,0 ,'Z', 'C', 'F', 'D', 'B', 'S', 'I', 'J', /* x */'@'};
-const static char * type_text[] = {"void","","","","boolean", "char", "float", "double", "byte", "short", "int", "long", "objet"};
+const static char * type_text[] = {"void","x","x","x","boolean", "char", "float", "double", "byte", "short", "int", "long", "objet"};
 
 struct symbol_ref 
 {
@@ -172,6 +163,7 @@ struct meta_base
 	bool is_bridge() const			{ return access_flag & 0x0040; }
 	bool is_varargs() const			{ return access_flag & 0x0080; }
 	bool is_native() const			{ return access_flag & 0x0100; }
+	bool is_interface() const		{ return access_flag & 0x0200; }
 	bool is_abstract() const		{ return access_flag & 0x0400; }
 	bool is_strict() const			{ return access_flag & 0x0800; }
 	bool is_synthetic() const		{ return access_flag & 0x1000; }
@@ -199,7 +191,9 @@ struct field : public name_and_type_meta
 struct method : public name_and_type_meta 
 {
 	bool is_method() { return true; }
-	std::vector<jtype> arg_types;
+	std::vector<jtype> arg_types; //存储类型
+	std::vector<symbol*> param_types; //具体类型
+	uint32_t arg_space = 0;
 	jtype  ret_type;
 	void (*native_method)() = nullptr;
 };
@@ -286,11 +280,16 @@ struct claxx : public class_ref, meta_base
 	claxx * get_array_claxx(thread *);
 	bool check_cast(claxx * sub);
 	jreference instantiate(thread *);
+	
+	virtual jreference instantiate(int length, thread *) { throw "Not Array Type";}
+	std::vector<const method *> constructors();
+	static claxx * from_mirror(jreference cls, thread *);
 };
 
 struct array_claxx : public claxx
 {
 	bool is_array() override { return true; }
+	jreference instantiate(int length, thread *) override ;
 	size_t size(int length) const override { return length*type_size[componen_type];}
 	uint32_t dimensions = 0;
 	array_claxx(const std::string & binary_name, classloader * ld, thread * current_thread);

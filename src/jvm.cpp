@@ -1,20 +1,25 @@
 #include "jvm.h"
 #include "class.h"
 #include "classloader.h"
+#include "frame.h"
 #include "thread.h"
 #include <csignal>
 #include <cstdio>
 #include <dlfcn.h>
 #include <sstream>
+#include <stdexcept>
 
 jvm::jvm():cloader(memery::alloc_meta<classloader>()) 
 {
 }
 
-void jvm::load_runtime(const std::string & runtime_path)
+void jvm::load_jar(const std::string & runtime_path)
 {
-	cloader->runtime_path = runtime_path;
-	cloader->rt_jar = zip_open(runtime_path.c_str(), 0, nullptr);
+	zip * z = zip_open(runtime_path.c_str(), 0, nullptr);
+	if (!z) {
+		throw std::runtime_error("jar not found");
+	}
+	cloader->jars.push_back(z);
 	//cloader->load_jar(runtime_path);
 }
 
@@ -25,7 +30,7 @@ thread * jvm::new_thread()
 		claxx * java_lang_ThreadGroup = cloader->load_class("java/lang/ThreadGroup", ret);
 		thread_group = java_lang_ThreadGroup->instantiate(ret);
 	}
-	auto f = ret->get_env()->lookup_field(ret->get_env()->get_class(ret->mirror), "group");
+	auto f = ret->get_env()->lookup_field_by_class(ret->get_env()->get_class(ret->mirror), "group");
 	ret->get_env()->set_object_field(ret->mirror, f, thread_group);
 	threads.push_back(ret);
 	return ret;
@@ -48,21 +53,23 @@ vm_native::native_metod vm_native::find_native_implement(method * m)
 {
 	if (!m) return 0;
 	const std::string & full_name = trans_method_name(m);
-	printf("find native %s\n", full_name.c_str());
+	//printf("find native %s\n", full_name.c_str());
 	return (native_metod)dlsym(handle, full_name.c_str());
 }
 
 void jvm::init_baisc_type()
 {
-	cloader->create_primitive(T_VOID);
-	cloader->create_primitive(T_BOOLEAN);
-	cloader->create_primitive(T_CHAR);
-	cloader->create_primitive(T_FLOAT);
-	cloader->create_primitive(T_DOUBLE);
-	cloader->create_primitive(T_BYTE);
-	cloader->create_primitive(T_SHORT);
-	cloader->create_primitive(T_INT);
-	cloader->create_primitive(T_LONG);
+#define PRIMITIVE(t) primitive_types[type_text[t]] = cloader->create_primitive(t)
+	PRIMITIVE(T_VOID);
+	PRIMITIVE(T_BOOLEAN);
+	PRIMITIVE(T_CHAR);
+	PRIMITIVE(T_FLOAT);
+	PRIMITIVE(T_DOUBLE);
+	PRIMITIVE(T_BYTE);
+	PRIMITIVE(T_SHORT);
+	PRIMITIVE(T_INT);
+	PRIMITIVE(T_LONG);
+#undef PRIMITIVE
 }
 void jvm::init(thread * current_thread)
 {
@@ -101,7 +108,7 @@ void jvm::run(const std::vector<std::string> & args)
 		return;
 	}
 	
-	operand_stack args_stack(args.size());
+	array_stack args_stack(args.size());
 	args_stack.push<jreference>(128);
 	main_thread->call(main_method, &args_stack);
 } 
@@ -115,7 +122,6 @@ jvm::~jvm()
 		}
 	}
 	threads.clear();
-	if (cloader->rt_jar) zip_close(cloader->rt_jar);
 }
 
 

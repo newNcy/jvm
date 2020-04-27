@@ -1,9 +1,13 @@
 #pragma once
 
+#include <stdexcept>
 #include <sys/types.h>
 #include <stdint.h>
 #include <string>
 #include <cstring>
+#include <map>
+#include <vector>
+#include "singleton.h"
 
 typedef uint8_t u1;
 typedef uint16_t u2;
@@ -120,6 +124,16 @@ struct cp_utf8 : public cp_info_base<CONSTANT_Utf8>
 	const char * c_str() const { return (const char *)bytes; };
 };
 
+typedef cp_utf8 symbol;
+
+struct symbol_pool : public singleton<symbol_pool>
+{
+	public:
+		symbol * put(symbol * sym);
+		symbol * put(const std::string sym);
+	private:
+		std::map<std::string, symbol*> symbols;
+};
 
 
 class byte_stream
@@ -138,9 +152,9 @@ class byte_stream
 		}
 		int pos(int p = -1) { return p == -1 ? position : position = p; }
 		void pos_offset(int off) { position += off; }
-		int value() const { return max > position ? max - position : 0; }
+		int value() const { return max > position ? max - position + 1: 0; }
 		template <typename T>
-		T get();
+			T get();
 
 		int read(u1 * out, size_t size)
 		{
@@ -162,14 +176,14 @@ class byte_stream
 		}
 };
 
-template <typename T>
+	template <typename T>
 T byte_stream::get()
 {
-	if (value() < sizeof(T)) return 0;
+	if (value() < sizeof(T)) throw std::runtime_error(std::string("max:")+std::to_string(max)+" pos:"+std::to_string(position) + " get:" + std::to_string(sizeof(T)));
 	T t = 0;
 	for (int i = sizeof(T) ; i > 0; i --) {
 		t |= (buf[position++]&0xff)<<((i-1)*8);
 	}
 	return t;
 }
-		
+
