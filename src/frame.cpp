@@ -123,7 +123,7 @@ frame::frame(thread * context,  method * to_call, array_stack * args)
 			while (args->top_pos() != s) {
 				args->pop<jint>();
 			}
-#if 0
+#if 1
 			int arg_pos = 0;
 			logstream ls(1024);
 			ls.printf("call %s.%s ", current_class->name->c_str(), current_method->name->c_str());

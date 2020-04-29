@@ -91,7 +91,6 @@ void jvm::run(const std::vector<std::string> & args)
 
 
 	init(main_thread);
-	printf("----------------------------------------------------------------------------------------------\n");
 	claxx * main_class = cloader->load_class(args[0], main_thread);
 	if (main_class->state < INITED) cloader->initialize_class(main_class, main_thread);
 	if (!main_class) {
@@ -110,7 +109,15 @@ void jvm::run(const std::vector<std::string> & args)
 	}
 	
 	array_stack args_stack(args.size());
-	args_stack.push<jreference>(128);
+	auto s = cloader->load_class("java/lang/String", main_thread);
+	auto sa = s->get_array_claxx(main_thread);
+
+	jreference jargs = sa->instantiate(args.size(), main_thread);
+	for (int i = 0 ; i < args.size(); i++) {
+		jreference str = main_thread->get_env()->create_string_intern(args[i]);
+		main_thread->get_env()->set_array_element(jargs, i, str);
+	}
+	args_stack.push<jreference>(jargs);
 	main_thread->call(main_method, &args_stack);
 } 
 

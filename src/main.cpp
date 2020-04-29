@@ -39,10 +39,15 @@ void sighandle(int s)
 
 int main(int argc, char * argv[])
 {
+	if (argc < 2) return 0;
+#if 0
 	const char * main_class_name = "Test";
+#endif
 
 	std::vector<std::string> args;
-	args.push_back(main_class_name);
+	for (int i = 1 ; i < argc; i++) {
+		args.push_back(argv[i]);
+	}
 
 
 	//signal(SIGSEGV, sighandle);

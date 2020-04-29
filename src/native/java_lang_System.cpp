@@ -5,18 +5,18 @@
 
 NATIVE void java_lang_System_registerNatives(environment * env,jreference cls)
 {
-	printf("java_lang_System_registerNatives called %d\n",cls);
+	log::debug("java_lang_System_registerNatives called %d\n",cls);
 }
 
 
 NATIVE void java_lang_System_loadLibrary(environment * env, jreference cls, jreference name)
 {
-	printf("java_lang_System_loadLibrarycalled %d %d\n", cls, name);
+	log::debug("java_lang_System_loadLibrarycalled %d %d\n", cls, name);
 }
 
 NATIVE jreference java_lang_System_initProperties(environment * env, jreference cls,  jreference prop)
 {
-	printf("java_lang_System_initProperties called %d prop ref %d\n", cls, prop);
+	log::debug("java_lang_System_initProperties called %d prop ref %d\n", cls, prop);
 	methodID put = env->lookup_method_by_object(prop, "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
 
 	auto put_prop = [env, put, prop] (const std::string & key, const std::string & value) {

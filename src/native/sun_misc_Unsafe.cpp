@@ -8,7 +8,7 @@
 
 NATIVE void sun_misc_Unsafe_registerNatives(environment * env,jreference cls)
 {
-	printf("java_lang_System_registerNatives called %d\n",cls);
+	log::debug("java_lang_System_registerNatives called %d\n",cls);
 }
 
 NATIVE jboolean sun_misc_Unsafe_compareAndSwapObject(environment * env, jreference unsafe, jreference obj, jlong off, jreference e, jreference x)
@@ -37,7 +37,7 @@ NATIVE jlong sun_misc_Unsafe_objectFieldOffset(environment * env, jreference uns
 
 NATIVE jint sun_misc_Unsafe_arrayBaseOffset(environment * env, jreference unsafe,  jreference arr)
 {
-	printf("array type %d %d\n", unsafe, arr);
+	log::debug("array type %d %d\n", unsafe, arr);
 	return 0;
 }
 

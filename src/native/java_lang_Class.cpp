@@ -1,6 +1,7 @@
 
 #include "native.h"
 #include "jvm.h"
+#include "log.h"
 #include "classloader.h"
 #include <cstdio>
 #include <cstdlib>
@@ -11,27 +12,27 @@ NATIVE int java_lang_Class_desiredAssertionStatus0(environment * env, jreference
 }
 NATIVE void java_lang_Class_registerNatives(environment * env,jreference cls)
 {
-	printf("java_lang_Object_registerNatives called %d\n", cls);
+	log::debug("java_lang_Object_registerNatives called %d\n", cls);
 }
 
 NATIVE jreference java_lang_Class_getPrimitiveClass(environment * env, jreference cls,  jreference ref)
 {
-	printf("java_lang_Class_getPrimitiveClass called %d prop ref %d\n", cls, ref);
+	log::debug("java_lang_Class_getPrimitiveClass called %d prop ref %d\n", cls, ref);
 	const std::string & bytes = env->get_utf8_string(ref);
-	printf("%s --> %d\n", bytes.c_str(), env->get_vm()->primitive_types[bytes]);
+	log::debug("%s --> %d\n", bytes.c_str(), env->get_vm()->primitive_types[bytes]);
 	return env->get_vm()->primitive_types[bytes];
 }
 
 NATIVE jboolean java_lang_Class_isPrimitive(environment * env, jreference obj)
 {
 	claxx * meta = env->get_vm()->get_class_loader()->claxx_from_mirror(obj);
-	printf("%d --> %s\n", obj, meta->name->c_str());
+	log::debug("%d --> %s\n", obj, meta->name->c_str());
 	return meta->is_primitive();
 }
 
 NATIVE jboolean java_lang_Class_isAssignableFrom(environment * env, jreference sup, jreference sub)
 {
-	printf("%d <- %d\n", sup, sub);
+	log::debug("%d <- %d\n", sup, sub);
 	if (sup == sub) return true;
 	auto a = env->get_vm()->get_class_loader()->claxx_from_mirror(sup);
 	auto b = env->get_vm()->get_class_loader()->claxx_from_mirror(sub);
@@ -86,7 +87,7 @@ NATIVE jreference java_lang_Class_getDeclaredConstructors0(environment * env, jr
 		jreference a = constructor->instantiate( env->get_thread());
 		jreference ps = ca->instantiate(con->arg_types.size(), env->get_thread());
 		if (!con->arg_types.empty()) {
-			printf("args %d\n", con->arg_types.size());
+			log::debug("args %d\n", con->arg_types.size());
 			int i = 0;
 			for (auto p : con->param_types) {
 				env->set_array_element(ps, i++, env->lookup_class(p->c_str()));
@@ -98,8 +99,8 @@ NATIVE jreference java_lang_Class_getDeclaredConstructors0(environment * env, jr
 		env->set_object_field(a, modifiers, mdf.i);
 		env->set_object_field(a, clazz, cls);
 		env->set_object_field(a, slot, con->slot);
-		printf("set %d clazz %d\n", a, cls);
-		printf("set %d modifiers %d\n", a, mdf.i);
+		log::debug("set %d clazz %d\n", a, cls);
+		log::debug("set %d modifiers %d\n", a, mdf.i);
 		env->set_array_element(ret, idx ++, a);
 	}
 	return ret;

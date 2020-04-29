@@ -59,10 +59,12 @@ bool thread::handle_exception()
 								current_frame->current_method->name->c_str(),
 								current_frame->current_method->discriptor->c_str()
 								);
+#if 0
 						printf("%s handle by %s.%s:%s\n", obj->meta->name->c_str(), 
 								current_frame->current_class->name->c_str(), 
 								current_frame->current_method->name->c_str(), 
 								current_frame->current_method->discriptor->c_str());
+#endif
 						return true;
 					}
 				}

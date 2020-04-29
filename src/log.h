@@ -59,7 +59,7 @@ struct logstream
 		print(' ');
 		print(args...);
 	}
-	void show(FILE * out = stdout)
+	void show(FILE * out = stderr)
 	{
 		fprintf(out, "%s\n", buf);
 		fflush(out);

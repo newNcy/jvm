@@ -226,10 +226,10 @@ jvalue environment::callmethod(methodID m, array_stack & args)
 	return get_thread()->call(mh, &args, false, true);
 }
 
-NATIVE int Test_test(environment * env,jreference cls, int arg) 
+NATIVE int Test_test(environment * env,jreference cls, jint a, jint b) 
 {
-	printf("Tes.test called arg:%d %d\n", cls, arg);
-	return arg * 2;
+	printf("Tes.test called arg:%d %d\n", a, b);
+	return a*b;
 }
 		
 void environment::dumpobj(jreference obj)
