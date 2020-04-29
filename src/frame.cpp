@@ -1,8 +1,11 @@
 #include "frame.h"
 #include "class.h"
 #include "log.h"
+#include "memery.h"
+#include "object.h"
 #include "thread.h"
 #include <cstdint>
+#include <cstdlib>
 #include <iterator>
 #include <stdexcept>
 #include <stdio.h>
@@ -120,6 +123,50 @@ frame::frame(thread * context,  method * to_call, array_stack * args)
 			while (args->top_pos() != s) {
 				args->pop<jint>();
 			}
+#if 1
+			int arg_pos = 0;
+			logstream ls(1024);
+			ls.printf("call %s.%s ", current_class->name->c_str(), current_method->name->c_str());
+			ls.printf("with args[%d]( ", current_method->arg_space);
+			if (!current_method->is_static())  {
+				ls.printf("this:%d ", locals->get<jreference>(0));
+				arg_pos = 1;
+			}
+			for (auto type : current_method->arg_types ) {
+				if (type == T_OBJECT) {
+					jreference obj = locals->get<jreference>(arg_pos);
+					object * oop = memery::ref2oop(obj);
+					if (oop) {
+						ls.printf("%s:", oop->meta->name->c_str());
+						if (oop->meta->name->equals("java/lang/String")) {
+							ls.printf("%s ", current_thread->get_env()->get_utf8_string(obj).c_str());
+						}else if (oop->meta->name->equals("java/lang/Class")) {
+							claxx * c = claxx::from_mirror(obj, current_thread);
+							ls.printf("%s ", c->name->c_str());
+						}else {
+							ls.printf("(%d) ", obj);
+						}
+					}else {
+						ls.printf("null ");
+					}
+				}else {
+					ls.printf("%s:", type_text[type]);
+					if (type == T_FLOAT) {
+						ls.print(locals->get<jfloat>(arg_pos));
+					}else if (type == T_LONG) {
+						ls.print(locals->get<jlong>(arg_pos));
+					}else if (type == T_DOUBLE) {
+						ls.print(locals->get<jdouble>(arg_pos));
+					}else {
+						ls.print(locals->get<jint>(arg_pos));
+					}
+					ls.printf(" ");
+				}
+				arg_pos += array::slot_need2(type);
+			}
+			ls.printf(")");
+			ls.show();
+#endif
 		}
 	}
 
@@ -134,8 +181,7 @@ jvalue frame::native()
 		current_method->native_method = fn;
 	}
 	if (!fn) {
-		//后面改成抛异常
-		throw "java/lang/UnsatisfiedLinkError";
+		throw std::runtime_error(vm_native::trans_method_name(current_method));//;"java/lang/UnsatisfiedLinkError";
 	}
 
 	uint32_t arg_count = current_method->arg_types.size() + 2;//Env指针,this/class指针
@@ -217,7 +263,6 @@ frame::~frame()
 {
 	if (locals) delete locals;
 	if (stack) delete stack;
-
 }
 
 void frame::print_stack() 

@@ -95,7 +95,7 @@ struct object
 		T get(int offset)
 		{
 			if (offset < 0 || offset >= size()) abort();
-			return *(T*)(data+ offset);
+			return *(T*)(data + offset);
 		}
 
 	template <typename T>

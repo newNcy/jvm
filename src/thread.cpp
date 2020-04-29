@@ -186,12 +186,22 @@ jvalue thread::call(method * m, array_stack * args, bool is_interface, bool call
 	/*
 	 * 处理interface方法
 	 */
+#if 0
 	if ((is_interface || m->is_abstract()) && args) {
 		jreference this_ref = args->get<jreference>(args->top_pos() - m->arg_space - 1 - args->begin());
 		m = static_cast<method*>(get_env()->lookup_method_by_object(this_ref, m->name->c_str(), m->discriptor->c_str()));
 	}
+#endif
 
 	current_frame = new frame(this, m, args);
+
+	//check this
+	if (!m->is_static()) {
+		if (current_frame->locals->get<jreference>(0) == null) {
+			pop_frame();
+			throw_exception_to_java("java/lang/NullPointerException");
+		}
+	}
 	jvalue ret = 0;
 
 	try {
@@ -207,10 +217,8 @@ jvalue thread::call(method * m, array_stack * args, bool is_interface, bool call
 	if (m->ret_type != T_VOID && !return_frame->current_method->is_native()) {
 		if (array::slot_need2(m->ret_type) == array::slot_need<jlong>::value) {
 			return_frame->stack->push(ret.j);
-			log::trace("%s.%s.%s returns %ld", m->owner->name->c_str(), m->name->c_str(), m->discriptor->c_str(), return_frame->stack->top<jlong>());
 		}else {
 			return_frame->stack->push(ret.i);
-			log::trace("%s.%s.%s returns %d", m->owner->name->c_str(), m->name->c_str(), m->discriptor->c_str(), return_frame->stack->top<jint>());
 		}
 	}
 	pop_frame();

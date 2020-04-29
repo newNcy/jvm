@@ -122,6 +122,17 @@ struct cp_utf8 : public cp_info_base<CONSTANT_Utf8>
 		return (char)bytes[idx];
 	}
 	const char * c_str() const { return (const char *)bytes; };
+	static u4 hash_for_max(const char * s, u4 max)
+	{
+		u4 ret = 0;
+		int i = 0;
+		while (s[i]) {
+			ret += i*s[i] + i;
+			ret %= max;
+			i ++;
+		}
+		return  ret;
+	}
 };
 
 typedef cp_utf8 symbol;
@@ -152,7 +163,7 @@ class byte_stream
 		}
 		int pos(int p = -1) { return p == -1 ? position : position = p; }
 		void pos_offset(int off) { position += off; }
-		int value() const { return max > position ? max - position + 1: 0; }
+		int value() const { return max >= position ? max - position + 1: 0; }
 		template <typename T>
 			T get();
 

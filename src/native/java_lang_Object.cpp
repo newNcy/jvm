@@ -16,3 +16,8 @@ NATIVE int java_lang_Object_clone(environment * env, jreference obj)
 	printf("java_lang_Object_clone called %d\n", obj);
 	return  env->clone_object(obj);
 }
+
+NATIVE jreference java_lang_Object_getClass(environment * env, jreference obj)
+{
+	return  env->get_class(obj);
+}

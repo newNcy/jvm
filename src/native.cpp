@@ -110,7 +110,7 @@ jreference environment::create_string(const std::string & bytes)
 jreference environment::create_basic_array(jtype type, uint32_t length)
 {
 	std::stringstream ss;
-	ss<<"["<<type_disc[type-T_BOOLEAN];
+	ss<<"["<<type_disc[type];
 	claxx * meta = get_vm()->get_class_loader()->load_class(ss.str(), get_thread());
 	return memery::alloc_heap_array(meta, length);
 }

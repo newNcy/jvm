@@ -75,6 +75,7 @@ NATIVE jreference java_lang_Class_getDeclaredConstructors0(environment * env, jr
 	field * param_types = constructor->lookup_field( "parameterTypes");
 	field * modifiers = constructor->lookup_field("modifiers");
 	field * clazz = constructor->lookup_field("clazz");
+	field * slot = constructor->lookup_field("slot");
 
 	auto ca = param_types->get_meta(env->get_thread());
 		
@@ -93,9 +94,10 @@ NATIVE jreference java_lang_Class_getDeclaredConstructors0(environment * env, jr
 		jvalue mdf;
 		mdf.i = con->access_flag;
 		env->set_object_field(a, modifiers, mdf.i);
-		printf("set %d modifiers %d\n", a, mdf.i);
 		env->set_object_field(a, clazz, cls);
+		env->set_object_field(a, slot, con->slot);
 		printf("set %d clazz %d\n", a, cls);
+		printf("set %d modifiers %d\n", a, mdf.i);
 		env->set_array_element(ret, idx ++, a);
 	}
 	return ret;

@@ -94,7 +94,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 						}else {
 							log::bytecode(this, op, "ldc double", c->value.d, "from", index);
 						}
-					}else { //数值型常量，根据占用格子大小
+					}else { 
 						stack->push(c->value.i);
 						log::bytecode(this, op, "ldc", c->value.i, "from", index);
 					}
@@ -225,6 +225,10 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 				locals->put(stack->pop<jint>(), op - ISTORE_0); 
 				log::bytecode(this, op, "istore",op - ISTORE_0);
 				break;
+			case LSTORE_0:
+				locals->put(stack->pop<jlong>(), op - LSTORE_0); 
+				log::bytecode(this, op, "lstore",op - LSTORE_0);
+				break;
 			case FSTORE_0:
 			case FSTORE_1:
 			case FSTORE_2:
@@ -257,6 +261,15 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					jint index = stack->pop<jint>();
 					jreference arrayref = stack->pop<jreference>();
 					log::bytecode(this, op, "aastore", value, "to", arrayref, '[', index, ']');
+					current_thread->get_env()->set_array_element(arrayref, index, value);
+				}
+				break;
+			case BASTORE:
+				{
+					jreference arrayref;
+					jint index, value;
+					stack->pop(arrayref, index, value);
+					log::bytecode(this, op, "bastore", value, "to", arrayref, '[', index, ']');
 					current_thread->get_env()->set_array_element(arrayref, index, value);
 				}
 				break;
@@ -323,6 +336,14 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					log::bytecode(this, op,"isub", a, b);
 				}
 				break;
+			case IMUL:
+				{
+					jint v1, v2;
+					stack->pop(v1, v2);
+					stack->push(v1*v2);
+					log::bytecode(this, op, "mul", v1, v2);
+				}
+				break;
 			case FMUL:
 				{
 					jfloat v2 = stack->pop<jfloat>();
@@ -331,13 +352,25 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					log::bytecode(this, op, "fmul", v1, v2);
 				}
 				break;
+			case IDIV:
+				{
+					jint v1,v2;
+					stack->pop(v1, v2);
+					log::bytecode(this, op, "idiv", v1, v2);
+					if (v2 == 0) {
+						stack->push<jint>(0);
+					}else {
+						stack->push<jint>(v1/v2);
+					}
+				}
+				break;
 			case FDIV:
 				{
 					jfloat v2 = stack->pop<jfloat>();
 					jfloat v1 = stack->pop<jfloat>();
 					log::bytecode(this, op, "fdiv", v1, v2);
 					if (v2 == 0) {
-						stack->push<jfloat>(0x7fc00000);
+						stack->push<>(0x7fc00000);
 					}else {
 						stack->push<jfloat>(v1/v2);
 					}
@@ -600,7 +633,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					jreference a = stack->pop<jreference>();
 					jreference b = stack->pop<jreference>();
 					int16_t offset = pc.get<int16_t>();
-					log::bytecode(this, op, "if", a, "equals", b, "goto", current_pc + offset);
+					log::bytecode(this, op, "if", a, "==", b, "goto", current_pc + offset);
 					if (a == b) pc.pos(current_pc + offset);
 				}
 				break;
@@ -609,12 +642,11 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					jreference a = stack->pop<jreference>();
 					jreference b = stack->pop<jreference>();
 					int16_t offset = pc.get<int16_t>();
-					log::bytecode(this, op, "if", a, "not equals", b, "goto", current_pc + offset);
+					log::bytecode(this, op, "if", a, "!=", b, "goto", current_pc + offset);
 					if (a != b) pc.pos(current_pc + offset);
 				}
 				break;
 			case GOTO:
-
 				{
 					int16_t offset = pc.get<int16_t>();
 					pc.pos(current_pc+offset);
@@ -624,16 +656,18 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 			case LOOKUPSWITCH:
 				{
 					jint key = stack->pop<jint>();
-					if (pc.pos() % 4 == 0) {
-						pc.pos_offset(4);
-					}else {
+
+					/*
+					 * 让 default_value 的第一个字节地址是4的整数
+					 */
+					if (pc.pos() % 4 != 0) {
 						pc.pos_offset(4-pc.pos()%4);
 					}
 					jint default_value = pc.get<jint>();
 					jint npairs = pc.get<jint>();
 					bool matched = false;
 
-					log::bytecode(this, op, "switch");
+					log::bytecode(this, op, "switch", key);
 #if 1
 					//case是排好序的，可以折半搜索
 					jint start = pc.pos(), end = start + (npairs-1)*8;
@@ -655,9 +689,10 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					}
 #else 
 					for (int i = 0; i < npairs; i ++) {
+						jint begin = pc.pos();
 						jint match = pc.get<jint>();
 						jint offset = pc.get<jint>();
-						printf("%c == %c goto %d\n", key, match, offset);
+						log::bytecode(this, op, "case", match, "goto" , current_pc + offset);
 						if (match == key ) {
 							pc.pos(current_pc + offset);
 							matched = true;
@@ -666,14 +701,34 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					}
 #endif
 					//getchar();
-					if (!matched)
+					if (!matched) {
+						log::bytecode(this, op, "default", ':',  current_pc + default_value);
 						pc.pos(current_pc + default_value);
+					}
 				}
 				break;
 			case IRETURN:
 				{
 					log::bytecode(this, op, "ireturn", stack->top<jint>());
 					return stack->pop<jint>();
+				}
+				break;
+			case LRETURN:
+				{
+					log::bytecode(this, op, "lreturn", stack->top<jlong>());
+					return stack->pop<jlong>();
+				}
+				break;
+			case FRETURN:
+				{
+					log::bytecode(this, op, "freturn", stack->top<jfloat>());
+					return stack->pop<jfloat>();
+				}
+				break;
+			case DRETURN:
+				{
+					log::bytecode(this, op, "dreturn", stack->top<jdouble>());
+					return stack->pop<jdouble>();
 				}
 				break;
 			case ARETURN:
@@ -684,6 +739,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 				break;
 			case RETURN:
 				{
+					log::bytecode(this, op, "return");
 					return 0;
 				}
 				break;
@@ -721,7 +777,6 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					u2 index = pc.get<u2>();
 					field * f = current_const_pool->get_field(index, current_thread);
 					jreference objref = stack->pop<jreference>();
-					log::bytecode(this, op,"getfield", f->owner->name->c_str(), f->name->c_str(),"on object",objref);
 					if (!objref) {
 						throw "java/lang/NullPointerException";
 						//abort();
@@ -732,6 +787,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					}else {
 						stack->push(obj->get_field(f).i);
 					}
+					log::bytecode(this, op,"getfield", f->owner->name->c_str(), f->name->c_str(),"on object", objref);
 				}
 				break;
 			case PUTFIELD:
@@ -764,28 +820,32 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 			case INVOKEVIRTUAL:
 			case INVOKESPECIAL:
 			case INVOKESTATIC:
-				{
-					const char * msg []  = {"invokevirtual", "invokespecial", "invokestatic"};
-					method * to_call = current_const_pool->get_method(pc.get<u2>(), current_thread);
-					log::bytecode(this, op, msg[op-INVOKEVIRTUAL], to_call->owner->name->c_str(), to_call->name->c_str(), to_call->discriptor->c_str());
-					if (to_call) {
-						if (to_call->is_static()) {
-							if (to_call->owner->state < INITED) to_call->owner->loader->initialize_class(to_call->owner, current_thread);
-						}
-						current_thread->call(to_call);
-					}else {
-
-					}
-				}
-				break;
 			case INVOKEINTERFACE:
 				{
-					u2 index = pc.get<u2>();
-					jint count = pc.get<u1>();
-					jint zero = pc.get<u1>();
-					method * interface_method = current_const_pool->get_method(index, current_thread);
-					log::bytecode(this, op, "invokeinterface", interface_method->owner->name->c_str(), interface_method->name->c_str(), interface_method->discriptor->c_str(), index, count, zero);
-					current_thread->call(interface_method, nullptr, true);
+					const char * msg []  = {"invokevirtual", "invokespecial", "invokestatic", "invokeinterface"};
+					method * target_method = current_const_pool->get_method(pc.get<u2>(), current_thread);
+					log::bytecode(this, op, msg[op-INVOKEVIRTUAL], target_method->owner->name->c_str(), target_method->name->c_str(), target_method->discriptor->c_str());
+
+					if (op == INVOKESTATIC) {
+						if (target_method->owner->state < INITED) {
+							target_method->owner->loader->initialize_class(target_method->owner, current_thread);
+						}
+					}else if (op == INVOKESPECIAL) {
+					}else {
+						if (op == INVOKEINTERFACE) {
+							jint count = pc.get<u1>();
+							jint zero = pc.get<u1>();
+						}
+						jreference thix = stack->get<jreference>(stack->top_pos() - target_method->arg_space - 1 - stack->begin());
+						if (!thix) {
+							throw "java/lang/NullPointerException";
+						}
+
+						method * real_method = static_cast<method*>(current_thread->get_env()->lookup_method_by_object(thix, target_method->name->c_str(), target_method->discriptor->c_str()));
+
+						target_method = real_method;
+					}
+					current_thread->call(target_method);
 				}
 				break;
 			case NEW:
@@ -896,6 +956,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 		//print_locals();
 		//fflush(stdout);
 	}
+#if 0
 	if (current_method->ret_type != T_VOID) {
 		if (array::slot_need2(current_method->ret_type) == array::slot_need<jlong>::value) {
 			return stack->pop<jlong>();
@@ -904,5 +965,6 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 		}
 	}
 	return 0;
+#endif
 }
 

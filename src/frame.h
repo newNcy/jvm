@@ -80,7 +80,7 @@ class array_stack : public array
 
 		template <typename One> One pop();
 		template <typename One> void pop(One & one);
-		template <typename ... More, typename One> void pop( More & ... more, One & one);
+		template <typename Last, typename ... More> void pop(Last & one, More & ... more); //发现是没用的设计,操作数大多两个，逐一pop两行，统一pop也是两行，没优势
 
 		template <typename One> void push(One t);
 		template <typename One, typename ... More> void push(One t, More ... more);
@@ -112,10 +112,10 @@ template <typename One> void array_stack::pop(One & one)
 	one = pop<One>();
 }
 
-template <typename ... More, typename One> void array_stack::pop( More & ... more, One & one)
+template <typename One, typename ... More> void array_stack::pop( One & one, More & ... more)
 {
-	pop(one);
 	pop(more ...);
+	pop(one);
 }
 
 template <typename One> void array_stack::push(One t)

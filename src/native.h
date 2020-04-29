@@ -20,9 +20,8 @@ class environment
 		jvm * vm = nullptr;
 		thread * current_thread = nullptr;
 		std::map<std::string, jreference> interns;
-		jvalue callmethod(methodID m, array_stack & args);
 	public:
-		environment(jvm * this_vm, thread * this_thread):vm(this_vm), current_thread(this_thread) {}
+		jvalue callmethod(methodID m, array_stack & args); environment(jvm * this_vm, thread * this_thread):vm(this_vm), current_thread(this_thread) {}
 		jvm * get_vm() { return vm; }
 		thread * get_thread() { return current_thread; }
 		

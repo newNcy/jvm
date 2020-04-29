@@ -97,7 +97,7 @@ class raw_const_pool
 			case CONSTANT_Double:
 				{
 					cp_double * num = (cp_double*)info;
-					ret->value.d = *(double*)&(num->bytes);
+					ret->value.l = num->bytes;
 				}
 				break;
 			case CONSTANT_NameAndType:
@@ -373,6 +373,7 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 	//printf("field count: %d\n",java_class->fields.size());
 
 	u2 method_count = stream.get<u2>();
+	java_class->method_by_index.resize(method_count);
 	while (method_count --) {
 		method * m = memery::alloc_meta<method>();
 		m->owner = java_class;
@@ -381,6 +382,10 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 		m->discriptor = raw_pool.get<symbol>(stream.get<u2>());
 		//if (!m->is_static()) m->arg_types.push_back(T_OBJECT); //this
 		m->ret_type = type_of_method_disc(m->discriptor, m->arg_types, m->param_types, m->arg_space);
+
+		//for slot suport
+		m->slot = method_count;
+		java_class->method_by_index[method_count] = m;
 
 		//printf("method native:%d %s:%s arg count %ld\n", m->is_native(), m->name->c_str(), m->discriptor->c_str(), m->arg_types.size());
 		u2 attr_count = stream.get<u2>();
@@ -481,14 +486,18 @@ const_pool * classloader::parse_const_pool(byte_stream & stream, std::vector<cp_
 			case CONSTANT_Long:
 				{
 					cp_long * num8 = memery::alloc_meta<cp_long>();
-					num8->bytes = stream.get<u8>();
+					u8 h = stream.get<u4>();
+					u4 l = stream.get<u4>();
+					num8->bytes = (h<<32) | l;
 					info = num8;
 				}
 				break;
 			case CONSTANT_Double:
 				{
 					cp_double * num8 = memery::alloc_meta<cp_double>();
-					num8->bytes = stream.get<u8>();
+					u8 h = stream.get<u4>();
+					u4 l = stream.get<u4>();
+					num8->bytes = (h<<32) | l;
 					info = num8;
 				}
 				break;

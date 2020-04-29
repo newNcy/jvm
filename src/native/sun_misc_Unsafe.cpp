@@ -2,6 +2,9 @@
 #include "native.h"
 #include "jvm.h"
 #include "classloader.h"
+#include "malloc.h"
+#include "log.h"
+#include <functional>
 
 NATIVE void sun_misc_Unsafe_registerNatives(environment * env,jreference cls)
 {
@@ -10,11 +13,16 @@ NATIVE void sun_misc_Unsafe_registerNatives(environment * env,jreference cls)
 
 NATIVE jboolean sun_misc_Unsafe_compareAndSwapObject(environment * env, jreference unsafe, jreference obj, jlong off, jreference expect, jreference newv)
 {
+	log::trace("cas object this:%d off:%ld old:%d new:%d", obj, off, expect, newv);
 	object * oop = memery::ref2oop(obj);
+	jreference val = null;
 	if (oop->get<jreference>(off) == expect) {
+		val = oop->get<jreference>(off);
 		oop->put<jreference>(off, newv);
+		log::trace("old val:%d", val);
 		return true;
 	}
+	getchar();
 	return false;
 }
 
@@ -55,4 +63,31 @@ NATIVE jint sun_misc_Unsafe_compareAndSwapInt(environment * env, jreference unsa
 		return true;
 	}
 	return false;
+}
+
+NATIVE jlong sun_misc_Unsafe_allocateMemory (environment * env, jreference unsafe, jlong size)
+{
+	return reinterpret_cast<jlong>(malloc(size));
+}
+
+NATIVE void sun_misc_Unsafe_freeMemory (environment * env, jreference unsafe, jlong address)
+{
+	free(reinterpret_cast<void*>(address));
+}
+
+NATIVE void sun_misc_Unsafe_putLong(environment * env, jreference unsafe, jlong address, jlong val)
+{
+	jlong * pointer = reinterpret_cast<jlong*>(address);
+	if (pointer) {
+		*pointer = val;
+	}
+}
+
+NATIVE jbyte sun_misc_Unsafe_getByte(environment * env, jreference unsafe, jlong address)
+{
+	jbyte * pointer = reinterpret_cast<jbyte*>(address);
+	if (pointer) {
+		return *pointer & 0xff;
+	}
+	return 0;
 }

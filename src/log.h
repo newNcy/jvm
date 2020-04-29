@@ -57,7 +57,11 @@ struct logstream
 		print(' ');
 		print(args...);
 	}
-
+	void show(FILE * out = stdout)
+	{
+		fprintf(out, "%s\n", buf);
+		fflush(out);
+	}
 	~logstream()
 	{
 		delete [] buf;
@@ -77,9 +81,8 @@ inline void  logstream::print(char c)
 			buf[p ++] = c;
 		}
 	} else {
-		print('\'');
+		print('\\');
 		print<int>(c);	
-		print('\'');
 	}
 }
 
@@ -135,7 +138,7 @@ inline void logstream::print(unsigned short i)
 template <>
 inline void logstream::print(long i)
 {
-	printf("%d",i);
+	printf("%ldL",i);
 }
 
 
@@ -161,10 +164,10 @@ void log::bytecode (frame * f, u1 op, const char * text, Args ... args)
 	int sz = size.ws_col;
 	if (!sz || sz > 10000) {
 	}
-	sz = 245;
+	sz = 210;
 
 	logstream ss(2*sz);
-	ss.printf(" [%s.%s::%05d] %s ", f->current_class->name->c_str(), f->current_method->name->c_str(), f->current_pc, text);
+	ss.printf(" [%s.%s::%05d/%05d] %s ", f->current_class->name->c_str(), f->current_method->name->c_str(), f->current_pc, f->code->code_length, text);
 	ss.print(args...);
 	ss.print(' ');
 
@@ -192,6 +195,5 @@ void log::bytecode (frame * f, u1 op, const char * text, Args ... args)
 
 	ss.printf("%s", right.buf);
 	//printf("%s\n", ss.buf);
-
-	trace(ss.buf);
+	ss.show();
 }

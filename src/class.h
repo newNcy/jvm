@@ -191,6 +191,7 @@ struct field : public name_and_type_meta
 struct method : public name_and_type_meta 
 {
 	bool is_method() { return true; }
+	jint slot = 0;
 	std::vector<jtype> arg_types; //存储类型
 	std::vector<symbol*> param_types; //具体类型
 	uint32_t arg_space = 0;
@@ -256,6 +257,7 @@ struct claxx : public class_ref, meta_base
 	classloader * loader = nullptr;
 	std::vector<claxx*> interfaces;
 	std::map<std::string,std::map<std::string, method *> > methods;
+	std::vector<method*> method_by_index;
 	std::map<std::string,field*> fields;
 	std::map<std::string,field*> static_fields;
 	std::set<claxx * > childs;
@@ -275,6 +277,7 @@ struct claxx : public class_ref, meta_base
 	method * get_init_method();
 	method * get_clinit_method();
 	method * lookup_method(const std::string & name, const std::string & discriptor, bool recursive = true);
+	method * method_at(jint slot) { return method_by_index[slot]; }
 	field * lookup_field(const std::string & name);
 	field * lookup_static_field(const std::string & name);
 	claxx * get_array_claxx(thread *);
