@@ -7,6 +7,7 @@ class claxx;
 struct object
 {
 	claxx * meta = nullptr;
+	static object * from_reference(jreference ref);
 	int mem_size = 0;
 	int array_size = 0;
 	bool is_array() { return meta->is_array(); }

@@ -15,7 +15,7 @@ jreference memery::alloc_heap_object(claxx * meta, bool is_static)
 	oop->meta = meta;
 	ref_oop_map[ref] = oop;
 	if (is_static) meta->static_obj = ref;
-	log::debug("[%d] %s [%d] bytes", ref, meta->name->c_str(), size);
+	log::object(ref);
 	return ref;
 }
 
@@ -27,8 +27,8 @@ jreference memery::alloc_heap_array(claxx * meta, size_t length)
 	object * oop = (object*)new char[size]();
 	new (oop) object(size, length);
 	oop->meta = meta;
-	log::debug("[%d] %s [%d] length[%d] bytes", ref, meta->name->c_str(), oop->array_length(), size);
 	ref_oop_map[ref] = oop;
+	log::object(ref);
 	return ref;
 }
 

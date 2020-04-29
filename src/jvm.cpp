@@ -43,6 +43,7 @@ std::string vm_native::trans_method_name(method * m)
 	std::string cls_name = m->owner->name->c_str();
 	for (auto & c : cls_name ) {
 		if (c == '/') c = '_';
+		if (c == '$') c = '_';
 	}
 	full_name<<cls_name<<'_'<<m->name->c_str();
 

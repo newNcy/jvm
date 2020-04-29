@@ -1,6 +1,7 @@
 
 #include "native.h"
 #include <cstdio>
+#include "log.h"
 
 NATIVE void java_lang_System_registerNatives(environment * env,jreference cls)
 {
@@ -43,19 +44,28 @@ NATIVE jreference java_lang_System_initProperties(environment * env, jreference 
 NATIVE void java_lang_System_setIn0(environment * env, jreference cls,  jreference in)
 {
 	fieldID f = env->lookup_field_by_class(cls, "in");
-	env->set_object_field(cls, f, in);
+	claxx * sys = claxx::from_mirror(cls, env->get_thread());
+	env->set_object_field(sys->static_obj, f, in);
 }
 
 NATIVE void java_lang_System_setOut0(environment * env, jreference cls,  jreference out)
 {
 	fieldID f = env->lookup_field_by_class(cls, "out");
-	env->set_object_field(cls, f, out);
+	claxx * sys = claxx::from_mirror(cls, env->get_thread());
+	env->set_object_field(sys->static_obj, f, out);
 }
 
 NATIVE void java_lang_System_setErr0(environment * env, jreference cls,  jreference err)
 {
 	fieldID f = env->lookup_field_by_class(cls, "err");
-	env->set_object_field(cls, f, err);
+	claxx * sys = claxx::from_mirror(cls, env->get_thread());
+	env->set_object_field(sys->static_obj, f, err);
+}
+
+NATIVE jreference java_lang_System_mapLibraryName(environment * env, jreference sys,  jreference name)
+{
+	log::trace("map library name %s", env->get_utf8_string(name).c_str());
+	return name;
 }
 
 NATIVE void java_lang_System_arraycopy(environment * env, jreference cls, jreference a, jint as,  jreference b, jint bs, jint len)

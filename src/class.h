@@ -1,6 +1,8 @@
 #pragma once
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
+#include <stdint.h>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -16,8 +18,8 @@ class method;
 class field;
 class classloader;
 
-typedef uint8_t jboolean;
-typedef int8_t jbyte;
+typedef int8_t jboolean;
+typedef uint8_t jbyte;
 typedef uint16_t jchar;
 typedef int16_t jshort;
 typedef int32_t jint;

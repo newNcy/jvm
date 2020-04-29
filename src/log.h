@@ -1,5 +1,6 @@
 #pragma once
 
+#include "class.h"
 #include "classfile.h"
 #include "frame.h"
 #include <alloca.h>
@@ -31,6 +32,7 @@ struct log
 	static int trace(const char * f, ...);
 	template <typename ... Args>
 	static void bytecode(frame * f, u1 op, const char *,Args ... args);
+	static void object(jreference);
 };
 
 
@@ -84,6 +86,12 @@ inline void  logstream::print(char c)
 		print('\\');
 		print<int>(c);	
 	}
+}
+
+template <>
+inline void  logstream::print(signed char c)
+{
+	print<char>(c);
 }
 
 template <>
@@ -197,3 +205,5 @@ void log::bytecode (frame * f, u1 op, const char * text, Args ... args)
 	//printf("%s\n", ss.buf);
 	ss.show();
 }
+
+

@@ -16,6 +16,7 @@
 #include <errno.h>
 #include "jvm.h"
 #include "object.h"
+#include "log.h"
 #include "thread.h"
 
 class raw_const_pool 
@@ -354,9 +355,6 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 			}
 		}
 		int & off = f->is_static()? static_off : mem_off;
-		if (f->name->equals("reflectionFactory")) {
-			//throw std::runtime_error(java_class->name->c_str());
-		}
 		if (f->is_static()) {
 			off = static_off;
 			java_class->static_fields[f->name->c_str()] = f;
@@ -364,7 +362,11 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 			java_class->fields[f->name->c_str()] = f;
 		}
 		//printf("field %s:%s static:%d type:%d size:%d\n", f->name->c_str(), f->discriptor->c_str(), f->is_static(),f->type, type_size[f->type-T_BOOLEAN]);
+		
 		f->offset = off;
+		if (f->name->equals("reflectionData")) {
+			//throw std::runtime_error(java_class->name->c_str());
+		}
 		off += type_size[f->type];
 	}
 	java_class->member_size = mem_off;

@@ -226,6 +226,9 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 				log::bytecode(this, op, "istore",op - ISTORE_0);
 				break;
 			case LSTORE_0:
+			case LSTORE_1:
+			case LSTORE_2:
+			case LSTORE_3:
 				locals->put(stack->pop<jlong>(), op - LSTORE_0); 
 				log::bytecode(this, op, "lstore",op - LSTORE_0);
 				break;
@@ -505,6 +508,13 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					log::bytecode(this, op, "f2i", v.f, result);
 				} 
 				break;
+			case I2B:
+				{
+					jbyte v = stack->pop<jint>();
+					stack->push<jint>(v);
+					log::bytecode(this, op, "i2b", v);
+				} 
+				break;
 			case I2C:
 				{
 					jint v = stack->pop<jint>();
@@ -512,17 +522,33 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					log::bytecode(this, op, "i2c", v);
 				} 
 				break;
+			case LCMPL: 
+				{
+					jlong v1, v2;
+					stack->pop(v1, v2);
+
+					if (v1 < v2) {
+						stack->push(-1);
+					}else if (v1 == v2) {
+						stack->push(0);
+					}else {
+						stack->push(1);
+					}
+					log::bytecode(this, op, "lcmp", a, b);
+				}
+				break;
 			case FCMPL:
 			case FCMPG:
 				{
+					const char * msg [] = {"fcmpl", "fcmpg"};
 					jfloat b = stack->pop<jfloat>();
 					jfloat a = stack->pop<jfloat>();
-					log::bytecode(this, op, "fcmpg", a, b);
 
 					jint f = op == FCMPL?-1:1;
 					if ( a > b ) stack->push<jint>(f);
 					else if ( a < b ) stack->push<jint>(-f);
 					else stack->push<jint>(0);
+					log::bytecode(this, op, msg[op-FCMPL], a, b);
 				}
 				break;
 			case IFEQ:
@@ -787,7 +813,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					}else {
 						stack->push(obj->get_field(f).i);
 					}
-					log::bytecode(this, op,"getfield", f->owner->name->c_str(), f->name->c_str(),"on object", objref);
+					log::bytecode(this, op,"getfield", f->owner->name->c_str(), f->name->c_str(), f->offset, "on object", objref);
 				}
 				break;
 			case PUTFIELD:

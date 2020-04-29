@@ -1,4 +1,6 @@
 #include "log.h"
+#include "memery.h"
+#include "object.h"
 #include <cstdio>
 #include <stdarg.h>
 
@@ -32,3 +34,11 @@ int logstream::printf(const char * f, ...)
 	return ret;
 }
 
+	
+void log::object(jreference obj)
+{
+	return;
+	::object * oop = object::from_reference(obj);
+	claxx * meta = oop->meta;
+	log::trace("[%d] of class %s", obj, meta->name->c_str());
+}

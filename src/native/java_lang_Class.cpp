@@ -45,6 +45,7 @@ NATIVE jreference java_lang_Class_getDeclaredFields0(environment * env, jreferen
 	jreference ret = env->create_obj_array(ec->mirror, cls_meta->fields.size());
 	auto name = env->lookup_field_by_class(ec->mirror, "name");
 	auto type = env->lookup_field_by_class(ec->mirror, "type");
+	auto clazz = env->lookup_field_by_class(ec->mirror, "clazz");
 	auto modifiers = env->lookup_field_by_class(ec->mirror, "modifiers");
 	int i = 0;
 	for (auto f : cls_meta->fields) {
@@ -54,6 +55,7 @@ NATIVE jreference java_lang_Class_getDeclaredFields0(environment * env, jreferen
 
 		env->set_object_field(e, name, nv);
 		env->set_object_field(e, type, fm);
+		env->set_object_field(e, clazz, cls);
 		env->set_object_field(e, modifiers, f.second->access_flag);
 		env->set_array_element(ret, i++, e);
 	}
