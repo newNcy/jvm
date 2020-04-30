@@ -4,9 +4,12 @@
 #include "memery.h"
 #include "jvm.h"
 #include "thread.h"
+#include <cstdio>
 #include <cstring>
 #include <sstream>
 #include <stdexcept>
+#include "log.h"
+
 
 claxx * const_pool::get_class(u2 idx, thread * current_thread)
 {
@@ -171,14 +174,50 @@ field * claxx::lookup_static_field(const std::string & name)
 	return nullptr;
 }
 
-bool claxx::check_cast(claxx * sub)
+bool claxx::has_implement(claxx * T)
 {
-	if (sub == this) return true;
-	for (auto cls : this->interfaces) {
-		if (cls->check_cast(sub)) return true;
+	for (auto inter : this->interfaces) {
+		if (inter == T || inter->subclass_of(T)) return true;
 	}
-	if (super_class) {
-		return super_class->check_cast(sub);
+	return false;
+}
+
+bool claxx::subclass_of(claxx * T)
+{
+	if (!T) return false;
+	if (this->super_class) {
+		if (super_class == T || super_class->subclass_of(T)) return true;
+	}
+	for (auto inter : this->interfaces) {
+		if (inter == T || inter->subclass_of(T)) return true;
+	}
+
+	return false;
+}
+bool claxx::check_cast_to(claxx * T)
+{
+	log::debug("check cast %s to %s", this->name->c_str(), T->name->c_str());
+	if (!T) return false;
+	if (this->is_class()) { //1.
+		if (T->is_class()) {
+			if (this == T || this->subclass_of(T)) return true; 
+		}else if (T->is_interface()) {
+			return this->subclass_of(T);
+		}
+	}else if (this->is_interface()) {
+		if (T->is_class()) return T->name->equals("java/lang/Object");
+		else if (T->is_interface())  return this == T || this->subclass_of(T);
+	}else if (this->is_array()) {
+		auto SC = static_cast<array_claxx*>(this)->component;
+		if (T->is_class()) return T->name->equals("java/lang/Object");
+		else if (T->is_interface()) throw "un implements";
+		else if (T->is_array()) {
+			auto TC = static_cast<array_claxx*>(this)->component;
+			if (SC->is_primitive() && TC->is_primitive()) return SC == TC;
+			else {
+				return SC->check_cast_to(TC);
+			}
+		}
 	}
 	return false;
 }
@@ -210,8 +249,10 @@ array_claxx::array_claxx(const std::string & binary_name, classloader * ld, thre
 	int i = 0;
 	while (i < binary_name.length() && binary_name[i] == '[') i++,dimensions ++;
 	this->componen_type = ld->type_of_disc(binary_name[i]);
+	this->access_flag = 0;
 	if (binary_name[i] == 'L') {
-		this->component = ld->load_class(std::string(binary_name, i, binary_name.length()), current_thread);
+		std::string componont_name(binary_name, i);
+		this->component = ld->load_class_from_disc(componont_name, current_thread);
 	}else {
 		this->component = ld->load_class(&binary_name[i], current_thread);
 	}

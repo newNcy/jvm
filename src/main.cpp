@@ -5,6 +5,7 @@
 #include <ffi-x86_64.h>
 #include <stdlib.h>
 #include <string>
+#include <utility>
 #include <vector>
 #include "class.h"
 #include "classfile.h"
@@ -37,25 +38,30 @@ void sighandle(int s)
 }
 
 
+struct ts 
+{
+	u2 first;
+	u2 second;
+};
 int main(int argc, char * argv[])
 {
-	if (argc < 2) return 0;
 #if 0
 	const char * main_class_name = "Test";
 #endif
 
+
+
+	//signal(SIGSEGV, sighandle);
+#if 1
+	if (argc < 2) return 0;
 	std::vector<std::string> args;
 	for (int i = 1 ; i < argc; i++) {
 		args.push_back(argv[i]);
 	}
-
-
-	//signal(SIGSEGV, sighandle);
-	//signal(SIGABRT, sighandle);
-#if 1
 	vm.load_jar("charsets.jar");
 	vm.load_jar("rt.jar");
 
+	//signal(SIGABRT, sighandle);
 	vm.run(args);
 #else
 	
@@ -83,6 +89,10 @@ int main(int argc, char * argv[])
 	log::trace("%ld", ((jlong)H << 32) | L);
 	log::trace("%ld", ((jlong)p[1] << 32) | p[0]);
 
+	jlong t = 0x0123456789abcdef;
+	bs.set_buf((const char*)&t, 8);
+	ts p2 = {bs.get<u2>(), bs.get<u2>()};
+	log::trace("%02x %02x", p2.first, p2.second);
 #endif
 	return 0;
 }

@@ -3,13 +3,12 @@
 #include "class.h"
 class claxx;
 
-
 struct object
 {
 	claxx * meta = nullptr;
 	static object * from_reference(jreference ref);
-	int mem_size = 0;
-	int array_size = 0;
+	bool is_static_obj = false;
+	int element_count = 0;
 	bool is_array() { return meta->is_array(); }
 	bool is_instance(claxx * cls) 
 	{ 
@@ -20,16 +19,20 @@ struct object
 		}
 		return false;
 	}
-	object(int msize, int arr_size = 0):mem_size(msize), array_size(arr_size) {}
+	object(bool st, int ec = 0): is_static_obj(st), element_count(ec) {}
 	object * clone ();
 	int size()  
 	{
-		return mem_size;
+		if (is_static_obj) return meta->static_size();
+		if (is_array()) {
+			return meta->size(element_count);
+		}
+		return meta->size();
 	}
 
 	int array_length() 
 	{
-		return array_size;
+		return element_count;
 	}
 
 	jvalue get_field(field * f)
@@ -95,14 +98,22 @@ struct object
 	template <typename T> 
 		T get(int offset)
 		{
-			if (offset < 0 || offset >= size()) abort();
+			if (offset < 0 || offset >= size()) {
+				for (auto f : meta->fields) {
+					printf("%s field %s offset %d of size %d %ld\n",meta->name->c_str(), f.second->name->c_str(), f.second->offset, size(), meta->size());
+				}
+				abort();
+			}
 			return *(T*)(data + offset);
 		}
 
 	template <typename T>
 		void put(int offset, T t)
 		{
-			if (offset < 0 || offset >= size()) abort();
+			if (offset < 0 || offset >= size())  {
+				printf("offset %d out of %d (%d)\n,", offset, size(), element_count);
+				abort();
+			}
 			*(T*)(data + offset) = t;
 		}
 

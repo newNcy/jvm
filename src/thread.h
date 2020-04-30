@@ -21,12 +21,12 @@ struct thread
 {
 	jreference mirror = null;
 	frame			* current_frame = nullptr;
+	std::vector<frame*> abrupt_frames;
 	environment runtime_env;
 	thread(jvm * this_vm);
 	environment * get_env() { return &runtime_env; }
 	jreference create_string(const std::string & bytes);
-	jvalue call_native(method * m, array_stack * args = nullptr);
-	jvalue call(method * m,array_stack * args = nullptr, bool is_interface = false, bool call_in_native = false);
+	jvalue call(method * m,array_stack * args = nullptr);
 	void pop_frame();
 	void run();
 	bool handle_exception();

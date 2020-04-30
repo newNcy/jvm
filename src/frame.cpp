@@ -135,8 +135,8 @@ frame::frame(thread * context,  method * to_call, array_stack * args)
 			for (auto type : current_method->arg_types ) {
 				if (type == T_OBJECT) {
 					jreference obj = locals->get<jreference>(arg_pos);
-					object * oop = memery::ref2oop(obj);
-					if (oop) {
+					if (obj) {
+						object * oop = memery::ref2oop(obj);
 						ls.printf("%s:", oop->meta->name->c_str());
 						if (oop->meta->name->equals("java/lang/String")) {
 							ls.printf("%s ", current_thread->get_env()->get_utf8_string(obj).c_str());
@@ -255,8 +255,30 @@ jvalue frame::native()
 
 void frame::throw_exception(const char * name)
 {
-	exception_occured = true;
-	runtime_error = name;
+	claxx * c = current_thread->get_env()->bootstrap_load(name);
+	jreference e = c->instantiate(current_thread);
+	handle_exception(e);
+}
+
+bool frame::handle_exception(jreference e)
+{
+	object * obj = memery::ref2oop(e);
+	for (auto eh : code->exceptions) {
+		if (eh.start_pc <= current_pc && current_pc <= eh.end_pc) {
+			auto type = current_const_pool->get_class(eh.catch_type, current_thread);
+			if (type == obj->meta) {
+				pc.pos( eh.handler_pc);
+				stack->push(e);
+				for (auto f : current_thread->abrupt_frames) {
+					delete f;
+				}
+				current_thread->abrupt_frames.clear();
+				return true;
+			}
+		}
+	}
+	throw e;
+	return false;
 }
 
 frame::~frame()

@@ -1,4 +1,5 @@
 #include "native.h"
+#include "attribute.h"
 #include "class.h"
 #include "frame.h"
 #include "memery.h"
@@ -12,6 +13,16 @@
 #include "jvm.h"
 #include "classloader.h"
 #include "debug.h"
+
+inline claxx * environment::bootstrap_load(const std::string & name )
+{ 
+	return get_vm()->get_class_loader()->load_class(name, get_thread());
+}
+
+inline const_pool * environment::current_const_pool()
+{
+	return get_thread()->current_frame->current_const_pool;
+}
 
 jreference environment::string_intern(jreference jref)
 {
@@ -223,7 +234,21 @@ methodID environment::lookup_method_by_object(jreference obj, const std::string 
 jvalue environment::callmethod(methodID m, array_stack & args)
 {
 	auto mh = static_cast<method*>(m);
-	return get_thread()->call(mh, &args, false, true);
+	return get_thread()->call(mh, &args);
+}
+
+jboolean environment::class_is_array(jreference cls)
+{
+	claxx * c = claxx::from_mirror(cls, get_thread());
+	if (c) return c->is_array();
+	return false;
+}
+		
+jreference environment::array_component(jreference cls)
+{
+	array_claxx * c = dynamic_cast<array_claxx*>(claxx::from_mirror(cls, get_thread()));
+	if (c) return c->component->mirror;
+	return null;
 }
 
 NATIVE int Test_test(environment * env,jreference cls, jint a, jint b) 
@@ -232,6 +257,39 @@ NATIVE int Test_test(environment * env,jreference cls, jint a, jint b)
 	return a*b;
 }
 		
+jreference environment::get_enclosing_method(jreference cls)
+{
+	claxx * meta = claxx::from_mirror(cls, get_thread());
+	auto enclosing_method = meta->get_attribute<enclosing_method_attr>();
+	if (!enclosing_method) return null;
+
+	claxx * obj_array = bootstrap_load("[java/lang/Object;");
+	jreference ret = obj_array->instantiate(3, get_thread());
+
+	auto cpool = current_const_pool();
+	set_array_element(ret, 0, cpool->get_class(enclosing_method->class_index, get_thread())->mirror);
+
+	auto name_and_type = get_thread()->current_frame->current_const_pool->get(enclosing_method->method_index)->value.i;
+	set_array_element(ret, 1, cpool->get_string(name_and_type >> 16, get_thread()));
+	set_array_element(ret, 2, cpool->get_string(name_and_type & 0xffff, get_thread()));
+	return ret;
+}
+		
+jreference environment::get_declaring_class(jreference cls)
+{
+	claxx * meta = claxx::from_mirror(cls, get_thread());
+	auto inner_attr = meta->get_attribute<inner_classes_attr>();
+	if (!inner_attr) return null;
+	for (auto inner_item : inner_attr->classes) {
+		auto inner = current_const_pool()->get_class(inner_item.inner_class_info_index, get_thread());
+		if (inner != meta) continue;
+
+		auto declaring = current_const_pool()->get_class(inner_item.outer_class_info_index, get_thread());
+		if (declaring) return declaring->mirror;
+	}
+	return null;
+}
+
 void environment::dumpobj(jreference obj)
 {
 

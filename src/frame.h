@@ -145,6 +145,7 @@ struct frame
 	bool exception_occured = false;
 	std::string runtime_error;
 	void throw_exception(const char * name);
+	bool handle_exception(jreference e);
 	void setup_args();
 	void print_stack();
 	void print_locals();

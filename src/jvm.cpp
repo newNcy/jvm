@@ -2,12 +2,14 @@
 #include "class.h"
 #include "classloader.h"
 #include "frame.h"
+#include "object.h"
 #include "thread.h"
 #include <csignal>
 #include <cstdio>
 #include <dlfcn.h>
 #include <sstream>
 #include <stdexcept>
+#include "log.h"
 
 jvm::jvm():cloader(memery::alloc_meta<classloader>()) 
 {

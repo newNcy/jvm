@@ -103,8 +103,8 @@ class raw_const_pool
 				break;
 			case CONSTANT_NameAndType:
 				{
-					memery::dealloc_meta_space(ret);
-					ret = nullptr;
+					cp_name_and_type * nnt = (cp_name_and_type *)info;
+					ret->value.i = nnt->name_index << 16 | nnt->discriptor_index; //from hostpot
 				}
 				break;
 			case CONSTANT_Utf8:
@@ -723,7 +723,9 @@ attribute * classloader::parse_attribute(byte_stream & stream,const raw_const_po
 		line_number_table_attr * ln_table = memery::alloc_meta<line_number_table_attr>();
 		u2 table_length = stream.get<u2>();
 		while (table_length --) {
-			auto p = std::make_pair(stream.get<u2>(), stream.get<u2>());
+			u2 v1 = stream.get<u2>();
+			u2 v2= stream.get<u2>();
+			auto p = std::make_pair(v1, v2);
 			//printf("line %d %d\n", p.first, p.second);
 			ln_table->line_number_table.insert(p);
 		}
@@ -935,9 +937,10 @@ void classloader::link_class(claxx * to_link)
 void classloader::initialize_class(claxx * to_init, thread * current_thread)
 {
 	if (!to_init || !current_thread) return;
-	if (!to_init->is_class() || to_init->state >= INITING) return;
-	to_init->state = INITING;
+	if (to_init->state >= INITING) return;
+	if (to_init->super_class && to_init->super_class->state < INITED) initialize_class(to_init->super_class, current_thread);
 	to_init->static_obj = memery::alloc_heap_object(to_init, true);
+	to_init->state = INITING;
 	method * clinit = to_init->get_clinit_method();
 	if (clinit) {
 		current_thread->call(clinit);
@@ -947,7 +950,7 @@ void classloader::initialize_class(claxx * to_init, thread * current_thread)
 		
 void classloader::create_mirror(claxx * cls, thread * current_thread)
 {
-	//printf("create mirror for %s\n", cls->name->c_str());
+	log::debug("create mirror for %s", cls->name->c_str());
 	claxx * java_lang_Class = load_class("java/lang/Class", current_thread);
 	cls->mirror = memery::alloc_heap_object(java_lang_Class);
 	/*

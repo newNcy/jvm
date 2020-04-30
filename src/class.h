@@ -10,6 +10,7 @@
 #include <set>
 #include "classfile.h"
 #include "attribute.h"
+#include "util.h"
 
 class memery;
 class thread;
@@ -75,6 +76,20 @@ union jvalue
 };
 
 
+template <typename T> struct element_type_helper;
+template <> struct element_type_helper <jboolean>	{ using type = jint; };
+template <> struct element_type_helper <jchar>		{ using type = jint; };
+template <> struct element_type_helper <jbyte>		{ using type = jint; };
+template <> struct element_type_helper <jshort>		{ using type = jint; };
+template <> struct element_type_helper <jint>		{ using type = jint; };
+template <> struct element_type_helper <jlong>		{ using type = jlong; };
+template <> struct element_type_helper <jfloat>		{ using type = jfloat; };
+template <> struct element_type_helper <jdouble>	{ using type = jdouble; };
+template <> struct element_type_helper <jreference>	{ using type = jreference; };
+template <typename RawType>
+using element_type = typename element_type_helper<RawType>::type;
+
+
 
 template <typename T> struct jtype_value_traits		{ enum { type_value = T_VOID};};
 
@@ -130,8 +145,6 @@ struct method_type_ref : public symbol_ref
 struct invoke_dynamic_ref : public method_ref 
 {
 	u2 boostrap_method_attr_index;
-	symbol * name = nullptr;
-	symbol * discriptor = nullptr;
 };
 
 struct const_pool_item 
@@ -173,7 +186,17 @@ struct meta_base
 	virtual bool is_class() { return false; }
 	virtual bool is_method() { return false; }
 	virtual bool is_field() { return false; }
+	template <typename T>
+	T * get_attribute();
 };
+
+template <typename T>
+inline T * meta_base::get_attribute()
+{
+	auto it = attributes.find(attribute_name<T>());
+	if (it != attributes.end()) return static_cast<T*>(it->second);
+	return nullptr;
+}
 
 struct name_and_type_meta : public meta_base
 {
@@ -270,7 +293,7 @@ struct claxx : public class_ref, meta_base
 	jreference mirror = 0;
 	jreference static_obj = 0; //暂时这么存放静态数据
 
-	bool is_class() { return true; }
+	virtual bool is_class() { return !is_interface(); }
 	virtual bool is_array() { return false; }
 	virtual bool is_primitive() { return false; }
 	size_t static_size() { return static_member_size; }
@@ -283,7 +306,9 @@ struct claxx : public class_ref, meta_base
 	field * lookup_field(const std::string & name);
 	field * lookup_static_field(const std::string & name);
 	claxx * get_array_claxx(thread *);
-	bool check_cast(claxx * sub);
+	bool subclass_of(claxx * T);
+	bool has_implement(claxx * T);
+	bool check_cast_to(claxx * T);
 	jreference instantiate(thread *);
 	
 	virtual jreference instantiate(int length, thread *) { throw "Not Array Type";}
@@ -293,7 +318,8 @@ struct claxx : public class_ref, meta_base
 
 struct array_claxx : public claxx
 {
-	bool is_array() override { return true; }
+	virtual bool is_class() override { return false; }
+	virtual bool is_array() override { return true; }
 	jreference instantiate(int length, thread *) override ;
 	size_t size(int length) const override { return length*type_size[componen_type];}
 	uint32_t dimensions = 0;

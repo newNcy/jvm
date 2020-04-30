@@ -9,7 +9,7 @@ NATIVE void java_lang_System_registerNatives(environment * env,jreference cls)
 }
 
 
-NATIVE void java_lang_System_loadLibrary(environment * env, jreference cls, jreference name)
+NATIVE void java_lang_System_loadLibrar(environment * env, jreference cls, jreference name)
 {
 	log::debug("java_lang_System_loadLibrarycalled %d %d\n", cls, name);
 }
@@ -38,6 +38,9 @@ NATIVE jreference java_lang_System_initProperties(environment * env, jreference 
 	put_prop("user.language", "zh");
 	put_prop("java.specification.version", "1.8");
 	put_prop("sun.io.unicode.encoding", "UnicodeBig");
+	put_prop("java.locale.providers", "JRE");
+	put_prop("sun.nio.cs.bugLevel", "1.4");
+	put_prop("gopherProxySet", "false");
 	return prop;
 }
 

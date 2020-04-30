@@ -1,20 +1,29 @@
 #pragma once
-#include "class.h"
+#include "attribute.h"
 #include <time.h>
 
-template <typename T> struct element_type_helper;
-template <> struct element_type_helper <jboolean>	{ using type = jint; };
-template <> struct element_type_helper <jchar>		{ using type = jint; };
-template <> struct element_type_helper <jbyte>		{ using type = jint; };
-template <> struct element_type_helper <jshort>		{ using type = jint; };
-template <> struct element_type_helper <jint>		{ using type = jint; };
-template <> struct element_type_helper <jlong>		{ using type = jlong; };
-template <> struct element_type_helper <jfloat>		{ using type = jfloat; };
-template <> struct element_type_helper <jdouble>	{ using type = jdouble; };
-template <> struct element_type_helper <jreference>	{ using type = jreference; };
 
-template <typename RawType>
-using element_type = typename element_type_helper<RawType>::type;
+template <typename T> 
+struct attribute_name_helper
+{
+	static const char * name;
+};
+
+#define MAP_ATTR_NAME(ATTR, NAME) \
+template <> struct attribute_name_helper<ATTR> { static constexpr const char * name = NAME;}
+
+MAP_ATTR_NAME( enclosing_method_attr,	"EnclosingMethod"	);
+MAP_ATTR_NAME( inner_classes_attr,		"InnerClasses"		);
+
+#undef MAP_ATTR_NAME
+
+
+template <typename T>
+const char * attribute_name()
+{
+	return attribute_name_helper<T>::name;
+}
+
 
 struct execute_time
 {

@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iterator>
+#include <stdexcept>
 #include <string>
 #include <sys/types.h>
 #include "classloader.h"
@@ -22,6 +23,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 	while (pc.value()) {
 		current_pc = pc.pos();
 		u4 op = pc.get<u1>();
+		try {
 		switch (op) {
 			case 0:
 				break;
@@ -122,6 +124,13 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					log::bytecode(this, op, "lload", index);
 				}
 				break;
+			case FLOAD:
+				{
+					jint index = pc.get<u1>();
+					stack->push(locals->get<jfloat>(index));
+					log::bytecode(this, op, "fload", index);
+				}
+				break;
 			case ILOAD_0:
 			case ILOAD_1:
 			case ILOAD_2:
@@ -156,7 +165,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 				{
 					jint index = op - FLOAD_0;
 					stack->push(locals->get<jfloat>(index));
-					log::bytecode(this, op, "fload ", locals->get<jfloat>(index));
+					log::bytecode(this, op, "fload ", locals->get<jfloat>(index), "from", index);
 				}
 				break;
 			case ALOAD_0:
@@ -187,6 +196,15 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					stack->push(e);
 				}
 				break;
+			case BALOAD:
+				{
+					jint index = stack->pop<jint>();
+					jreference array = stack->pop<jreference>();
+					jboolean e = current_thread->get_env()->get_array_element(array, index);
+					log::bytecode(this, op, "aaload", e, "from", array, '[', index, ']');
+					stack->push(e);
+				}
+				break;
 			case CALOAD:
 				{
 					jint index = stack->pop<jint>();
@@ -205,9 +223,17 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 			case LSTORE: 
 				{
 					jint index = pc.get<u1>();
-					jreference obj = stack->pop<jlong>();
+					jlong obj = stack->pop<jlong>();
 					locals->put(obj, index);
 					log::bytecode(this, op, "lstore", obj, "to", index);
+				}
+				break;
+			case FSTORE: 
+				{
+					jint index = pc.get<u1>();
+					jfloat obj = stack->pop<jfloat>();
+					locals->put(obj, index);
+					log::bytecode(this, op, "fstore", obj, "to", index);
 				}
 				break;
 			case ASTORE:
@@ -329,6 +355,14 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					jlong a = stack->pop<jlong>();
 					stack->push<jlong>(a+b);
 					log::bytecode(this, op, "ladd", a, b);
+				}
+				break;
+			case DADD:
+				{
+					jdouble a, b;
+					stack->pop(a, b);
+					stack->push(a+b);
+					log::bytecode(this, op, "dadd", a, b);
 				}
 				break;
 			case ISUB:
@@ -497,6 +531,20 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					log::bytecode(this, op, "i2f", v);
 				} 
 				break;
+			case L2I:
+				{
+					jint v = stack->pop<jlong>();
+					stack->push(v);
+					log::bytecode(this, op, "l2i", v);
+				} 
+				break;
+			case L2F:
+				{
+					jfloat v = stack->pop<jlong>();
+					stack->push(v);
+					log::bytecode(this, op, "l2f", v);
+				} 
+				break;
 			case F2I:
 				{
 					jvalue v = stack->pop<jfloat>();
@@ -507,6 +555,20 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					stack->push(result);
 					log::bytecode(this, op, "f2i", v.f, result);
 				} 
+				break;
+			case F2D:
+				{
+					jdouble v = stack->pop<jfloat>();
+					stack->push(v);
+					log::bytecode(this, op, "f2d", v);
+				}
+				break;
+			case D2L:
+				{
+					jlong v = stack->pop<jdouble>();
+					stack->push(v);
+					log::bytecode(this, op, "d2l", v);
+				}
 				break;
 			case I2B:
 				{
@@ -534,7 +596,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					}else {
 						stack->push(1);
 					}
-					log::bytecode(this, op, "lcmp", a, b);
+					log::bytecode(this, op, "lcmp", v1, v2);
 				}
 				break;
 			case FCMPL:
@@ -544,9 +606,8 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					jfloat b = stack->pop<jfloat>();
 					jfloat a = stack->pop<jfloat>();
 
-					jint f = op == FCMPL?-1:1;
-					if ( a > b ) stack->push<jint>(f);
-					else if ( a < b ) stack->push<jint>(-f);
+					if ( a > b ) stack->push<jint>(1);
+					else if ( a < b ) stack->push<jint>(-1);
 					else stack->push<jint>(0);
 					log::bytecode(this, op, msg[op-FCMPL], a, b);
 				}
@@ -679,38 +740,66 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					log::bytecode(this, op, "goto", current_pc + offset);
 				}
 				break;
+			case TABLESWITCH:
+				{
+					jint index = stack->pop<jint>();
+
+					/*
+					 * 同lookupswitch
+					 */
+					if (pc.pos() % 4 != 0) {
+						pc.pos_offset(4-pc.pos()%4);
+					}
+					
+					jint default_value = pc.get<jint>();
+					jint low = pc.get<jint>();
+					jint hight = pc.get<jint>();
+
+					log::bytecode(this, op, "switch", index, "in", low , "to", hight);
+					if (index < low || hight < index) {
+						log::bytecode(this, op, "default", current_pc + default_value);
+						pc.pos(current_pc + default_value);
+					}else {
+						pc.pos_offset((index-low)*4);
+						jint go = pc.get<jint>();
+						log::bytecode(this, op , "case", index, "goto", current_pc + go);
+						pc.pos(current_pc + go);
+					}
+				}
+				break;
 			case LOOKUPSWITCH:
 				{
 					jint key = stack->pop<jint>();
-
+					
 					/*
 					 * 让 default_value 的第一个字节地址是4的整数
 					 */
 					if (pc.pos() % 4 != 0) {
 						pc.pos_offset(4-pc.pos()%4);
 					}
+
 					jint default_value = pc.get<jint>();
 					jint npairs = pc.get<jint>();
-					bool matched = false;
-
-					log::bytecode(this, op, "switch", key);
+					log::bytecode(this, op, "switch", key, "in", npairs, "pairs");
 #if 1
+					jint start_address = pc.pos();
 					//case是排好序的，可以折半搜索
-					jint start = pc.pos(), end = start + (npairs-1)*8;
+					jint start = 0, end = npairs-1;
+					bool matched = false;
 					while (start <= end) {
 						jint mid = (start + end)/2;
-						pc.pos(mid);
+						pc.pos(start_address + mid * 8);
 						jint match = pc.get<jint>();
 						jint pos = pc.get<jint>();
-						log::bytecode(this, op, "case", match, ":", current_pc + pos);
+						log::bytecode(this, op, "case", mid, match, ":", current_pc + pos);
 						if (match == key) {
 							pc.pos(current_pc + pos);
 							matched = true;
 							break;
 						}else if (match > key) {
-							end = mid - 8;
+							end = mid - 1;
 						}else {
-							start = mid + 8;
+							start = mid + 1;
 						}
 					}
 #else 
@@ -718,7 +807,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 						jint begin = pc.pos();
 						jint match = pc.get<jint>();
 						jint offset = pc.get<jint>();
-						log::bytecode(this, op, "case", match, "goto" , current_pc + offset);
+						log::bytecode(this, op, "case", begin, match, "goto" , current_pc + offset);
 						if (match == key ) {
 							pc.pos(current_pc + offset);
 							matched = true;
@@ -773,6 +862,9 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 				{
 					field * f = current_const_pool->get_field(pc.get<u2>(), current_thread);
 					f->owner->loader->initialize_class(f->owner, current_thread);
+					if (!f->owner->static_obj) {
+						f->owner->loader->initialize_class(f->owner, current_thread);
+					}
 					object * oop = memery::ref2oop(f->owner->static_obj);
 					jvalue v = oop->get_field(f);
 					if (f->type == T_LONG || f->type == T_DOUBLE) {
@@ -787,6 +879,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 				{
 					u2 index = pc.get<u2>();
 					field * f = current_const_pool->get_field(index, current_thread);
+					f->owner->loader->initialize_class(f->owner, current_thread);
 					object * oop = memery::ref2oop(f->owner->static_obj);
 					jvalue v = 0; 
 					if (f->type == T_LONG || f->type == T_DOUBLE) {
@@ -813,7 +906,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					}else {
 						stack->push(obj->get_field(f).i);
 					}
-					log::bytecode(this, op,"getfield", f->owner->name->c_str(), f->name->c_str(), f->offset, "on object", objref);
+					log::bytecode(this, op,"getfield", f->owner->name->c_str(), f->name->c_str(), f->discriptor->c_str(), f->offset, "on object", objref);
 				}
 				break;
 			case PUTFIELD:
@@ -822,7 +915,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					u2 index = pc.get<u2>();
 					field * f = current_const_pool->get_field(index, current_thread);
 					//log::debug("putfield %s.%s on object ref ", f->owner->name->c_str(), f->name->c_str());
-					log::bytecode(this, op, "putfield", f->owner->name->c_str(), f->name->c_str());
+					log::bytecode(this, op, "putfield", f->owner->name->c_str(), f->name->c_str(), f->discriptor->c_str());
 					jreference objref = 0;
 					if (f->type == T_LONG || f->type == T_DOUBLE) {
 						jlong v = stack->pop<jlong>();
@@ -848,6 +941,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 			case INVOKESTATIC:
 			case INVOKEINTERFACE:
 				{
+					try {
 					const char * msg []  = {"invokevirtual", "invokespecial", "invokestatic", "invokeinterface"};
 					method * target_method = current_const_pool->get_method(pc.get<u2>(), current_thread);
 					log::bytecode(this, op, msg[op-INVOKEVIRTUAL], target_method->owner->name->c_str(), target_method->name->c_str(), target_method->discriptor->c_str());
@@ -872,6 +966,9 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 						target_method = real_method;
 					}
 					current_thread->call(target_method);
+					}catch (jreference e) {
+						handle_exception(e);
+					}
 				}
 				break;
 			case NEW:
@@ -915,8 +1012,8 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 			case ATHROW:
 				{
 					log::bytecode(this, op, "athrow\n");
-					exception_occured = true;
-					return 0;
+					jreference e = stack->pop<jreference>();
+					handle_exception(e);
 				}
 				break;
 			case CHECKCAST:
@@ -924,9 +1021,11 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					u2 index = pc.get<u2>();
 					claxx * cls = current_const_pool->get_class(index, current_thread);
 					jreference ref = stack->top<jreference>();
+					if (ref == null) break;
 					object * obj = memery::ref2oop(ref);
 					log::bytecode(this, op, "checkcast", stack->top<jreference>(), "to", cls->name->c_str());
-					if (obj && !obj->meta->check_cast(cls)) {
+					if (obj && !obj->meta->check_cast_to(cls)) {
+						//stack->pop<jreference>();
 						throw "java/lang/ClassCastException";
 					}
 				}
@@ -978,6 +1077,11 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 				fflush(stdout);
 				abort();
 		}
+		}catch (const char * name) {
+			throw_exception(name);
+		}catch (jreference e) {
+			handle_exception(e);
+		}
 		//print_stack();
 		//print_locals();
 		//fflush(stdout);
@@ -992,5 +1096,6 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 	}
 	return 0;
 #endif
+	return 0;
 }
 

@@ -3,6 +3,8 @@
 #include "classloader.h"
 #include "object.h"
 #include "log.h"
+#include <stdexcept>
+#include <string>
 
 std::map<jreference, object*> memery::ref_oop_map;
 jreference memery::alloc_heap_object(claxx * meta, bool is_static)
@@ -11,7 +13,7 @@ jreference memery::alloc_heap_object(claxx * meta, bool is_static)
 	jreference ref = ref_oop_map.size() + 1;
 	uint32_t size = sizeof(object) + (is_static ? meta->static_member_size : meta->size());
 	object * oop = (object*)new char[size]();
-	new (oop) object(size);
+	new (oop) object(is_static);
 	oop->meta = meta;
 	ref_oop_map[ref] = oop;
 	if (is_static) meta->static_obj = ref;
@@ -25,7 +27,7 @@ jreference memery::alloc_heap_array(claxx * meta, size_t length)
 	jreference ref = ref_oop_map.size() + 1;
 	uint32_t size = sizeof(object) + meta->size(length);
 	object * oop = (object*)new char[size]();
-	new (oop) object(size, length);
+	new (oop) object(false, length);
 	oop->meta = meta;
 	ref_oop_map[ref] = oop;
 	log::object(ref);
@@ -35,7 +37,7 @@ jreference memery::alloc_heap_array(claxx * meta, size_t length)
 object * memery::ref2oop(jreference ref)
 {
 	auto res = ref_oop_map.find(ref);
-	if ( res == ref_oop_map.end()) return nullptr;
+	if ( res == ref_oop_map.end()) throw "java/lang/NullpointerException";
 	return res->second;
 }
 

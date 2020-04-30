@@ -16,5 +16,6 @@ add_executable(java ${SRC})
 target_link_libraries(java zip dl ffi native)
 set(CMAKE_EXPORT_COMPILE_COMMANDS true)
 
+aux_source_directory(class JAVA_SRC)
 execute_process(COMMAND javac ${JAVA_SRC} )
 

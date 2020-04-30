@@ -69,6 +69,17 @@ NATIVE jint sun_misc_Unsafe_compareAndSwapInt(environment * env, jreference unsa
 	return false;
 }
 
+NATIVE jint sun_misc_Unsafe_compareAndSwapLong(environment * env, jreference unsafe, jreference obj, jlong off, jlong e, jlong x)
+{
+	object * oop = memery::ref2oop(obj);
+	if (oop->get<jlong>(off) == e) {
+		oop->put<jint>(off, x);
+		return true;
+	}
+	return false;
+}
+
+
 NATIVE jlong sun_misc_Unsafe_allocateMemory (environment * env, jreference unsafe, jlong size)
 {
 	return reinterpret_cast<jlong>(malloc(size));
@@ -94,4 +105,17 @@ NATIVE jbyte sun_misc_Unsafe_getByte(environment * env, jreference unsafe, jlong
 		return *pointer & 0xff;
 	}
 	return 0;
+}
+
+NATIVE jreference sun_misc_Unsafe_getObjectVolatile(environment * env, jreference unsafe, jreference obj, jlong offset)
+{
+	object * oop = object::from_reference(obj);
+	if (!oop) return null;
+	return oop->get<jreference>(offset);
+}
+NATIVE void sun_misc_Unsafe_putObjectVolatile(environment * env, jreference unsafe, jreference obj, jlong offset, jreference x)
+{
+	object * oop = object::from_reference(obj);
+	if (!oop) return ;
+	return oop->put<jreference>(offset, x);
 }
