@@ -41,57 +41,6 @@ void thread::pop_frame()
 	current_frame = next;
 }
 
-bool thread::handle_exception()
-{
-	std::vector<std::pair<method*, u2>> unhandle_methods;
-	jreference e = current_frame->stack->pop<jreference>();
-	object * obj = memery::ref2oop(e);
-	for (;current_frame;) {
-		if (current_frame->code) {
-			for (exception eh : current_frame->code->exceptions) {
-				u2 cur_pc = current_frame->pc.pos();
-				if (eh.start_pc <= cur_pc && cur_pc <= eh.end_pc) {
-					auto type = current_frame->current_const_pool->get_class(eh.catch_type, this);
-					if (type == obj->meta) {
-						current_frame->pc.pos( eh.handler_pc);
-						current_frame->stack->push(e);
-						current_frame->interpreter(
-								current_frame->current_class->name->c_str(),
-								current_frame->current_method->name->c_str(),
-								current_frame->current_method->discriptor->c_str()
-								);
-#if 1
-						printf("%s handle by %s.%s:%s\n", obj->meta->name->c_str(), 
-								current_frame->current_class->name->c_str(), 
-								current_frame->current_method->name->c_str(), 
-								current_frame->current_method->discriptor->c_str());
-#endif
-						return true;
-					}
-				}
-			}
-			unhandle_methods.push_back(std::make_pair(current_frame->current_method, current_frame->current_pc));
-		}
-		pop_frame();
-	}
-	printf("unhandle exception %s at:\n", obj->meta->name->c_str());
-	for (auto && call : unhandle_methods) {
-		auto m = call.first;
-		auto pc = call.second;
-		auto source_attr_it = m->owner->attributes.find("SourceFile");
-		auto source = m->owner->cpool->get(static_cast<source_attr*>( source_attr_it->second)->sourcefile_index);
-		printf("\t%s.%s:%d ", m->owner->name->c_str(), m->name->c_str(), pc);
-		if (source) {
-			printf("%s", source->utf8_str->c_str());
-		}else {
-			printf("??????");
-		}
-		printf("\n");
-	}
-	exit(0);
-	return false;
-}
-
 /*
  * 任何方法调用都会经过这个
  */
@@ -118,7 +67,7 @@ jvalue thread::call(method * m, array_stack * args)
 	if (!m->is_static()) {
 		if (current_frame->locals->get<jreference>(0) == null) {
 			pop_frame();
-			throw_exception_to_java("java/lang/NullPointerException");
+			get_env()->throw_exception("java/lang/NullPointerException", "");
 		}
 	}
 	jvalue ret = 0;
@@ -145,10 +94,34 @@ jvalue thread::call(method * m, array_stack * args)
 		current_frame = current_frame->caller_frame;
 		if (!current_frame) {
 			object * oop = object::from_reference(e);
-			auto msg = oop->meta->lookup_field("detailMessage");
-			log::debug("throw %s(%s):", oop->meta->name->c_str(), get_env()->get_utf8_string(get_env()->get_object_field(e, msg)).c_str());
+			auto get_msg = oop->meta->lookup_method("getMessage","()Ljava/lang/String;");
+			jreference msg_ref  = get_env()->callmethod(get_msg, e);
+			log::debug("throw %s(%s):", oop->meta->name->c_str(), msg_ref ? get_env()->get_utf8_string(msg_ref).c_str() : "no msg");
 			for (auto f : this->abrupt_frames) {
-				log::debug("\tat %s.%s", f->current_class->name->c_str(), f->current_method->name->c_str());
+				int line = 0;
+				logstream log(2024);
+				log.printf("\tat %s.%s ", 
+							f->current_class->name->c_str(), 
+							f->current_method->name->c_str());
+
+
+				if (f->current_method->is_native()) {
+					log.printf("(native code)");
+				}else {
+					auto linetbs = f->code->get_attributes<line_number_table_attr>();
+					int line = -1;
+					for (auto tb : linetbs) {
+						for (auto item = tb->line_number_table.rbegin(); item != tb->line_number_table.rend();  ++ item) {
+							if (f->current_pc >= item->first) {
+								line = item->second;
+								break;
+							}
+						}
+						if (line != -1) break;
+					}
+					log.printf("(%s):%d", f->current_const_pool->get(f->current_class->get_attributes<source_attr>()[0]->sourcefile_index)->utf8_str->c_str(), line);
+				}
+				log.show();
 				delete f;
 			}
 			exit(0);
@@ -165,12 +138,6 @@ jreference thread::create_string(const std::string & bytes)
 	return get_env()->create_string(bytes);
 }
 
-void thread::throw_exception_to_java(const std::string & name)
-{
-	claxx * c = get_env()->get_vm()->get_class_loader()->load_class(name, this);
-	current_frame->stack->push(memery::alloc_heap_object(c));
-	handle_exception();
-}
 
 thread::thread(jvm * this_vm): runtime_env(this_vm, this)
 {

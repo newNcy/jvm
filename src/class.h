@@ -165,10 +165,9 @@ struct const_pool_item
 };
 
 
-struct meta_base
+struct meta_base : public attribute_holder
 {
 	u2 access_flag;
-	std::map<std::string, attribute * > attributes;
 	bool is_public() const			{ return access_flag & 0x0001; }
 	bool is_private() const			{ return access_flag & 0x0002; }
 	bool is_protect() const			{ return access_flag & 0x0004; }
@@ -186,17 +185,7 @@ struct meta_base
 	virtual bool is_class() { return false; }
 	virtual bool is_method() { return false; }
 	virtual bool is_field() { return false; }
-	template <typename T>
-	T * get_attribute();
 };
-
-template <typename T>
-inline T * meta_base::get_attribute()
-{
-	auto it = attributes.find(attribute_name<T>());
-	if (it != attributes.end()) return static_cast<T*>(it->second);
-	return nullptr;
-}
 
 struct name_and_type_meta : public meta_base
 {

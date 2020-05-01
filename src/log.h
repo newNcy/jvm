@@ -78,10 +78,11 @@ inline void logstream::print(int i)
 template <>
 inline void  logstream::print(char c)
 {
+	if (p < n - 3) {
+		buf[p ++] = c;
+	}
+	return;
 	if (0x20 <= c && c <= 0x7e) {
-		if (p < n - 3) {
-			buf[p ++] = c;
-		}
 	} else {
 		print('\\');
 		print<int>(c);	

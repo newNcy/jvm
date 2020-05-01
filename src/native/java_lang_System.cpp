@@ -41,6 +41,7 @@ NATIVE jreference java_lang_System_initProperties(environment * env, jreference 
 	put_prop("java.locale.providers", "JRE");
 	put_prop("sun.nio.cs.bugLevel", "1.4");
 	put_prop("gopherProxySet", "false");
+	put_prop("java.home", "/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.242.b08-0.el7_7.x86_64/jre");
 	return prop;
 }
 
@@ -76,4 +77,10 @@ NATIVE void java_lang_System_arraycopy(environment * env, jreference cls, jrefer
 	for (int i = 0 ; i < len; i ++) {
 		jvalue e =  env->get_array_element(a, i + as);
 		env->set_array_element(b, i+bs, e);
-	} }
+	} 
+}
+
+NATIVE jlong java_lang_System_nanoTime(environment * env, jreference cls) 
+{
+	return 0;
+}

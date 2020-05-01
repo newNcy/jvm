@@ -224,4 +224,12 @@ NATIVE jreference java_lang_Class_getEnclosingMethod0(environment * env, jrefere
 
 NATIVE jreference java_lang_Class_getDeclaringClass0(environment * env, jreference cls)
 {
+	return env->get_declaring_class(cls);
+}
+
+NATIVE jboolean java_lang_Class_isInstance(environment * env, jreference thix, jreference obj)
+{
+	claxx * T = claxx::from_mirror(thix, env->get_thread());
+	claxx * S = claxx::from_mirror(env->get_class(obj), env->get_thread());
+	return S->check_cast_to(T);
 }

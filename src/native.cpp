@@ -64,6 +64,9 @@ int unicode_length(const char * buf, int len)
 	
 std::string environment::get_utf8_string(jreference ref)
 {
+	if (!ref) {
+		throw_exception("java/lang/NullPointerException","xx");
+	}
 	fieldID valueid = lookup_field_by_class(get_class(ref), "value");
 	jreference value = get_object_field(ref, valueid);
 	if (!value) return "";
@@ -256,20 +259,20 @@ NATIVE int Test_test(environment * env,jreference cls, jint a, jint b)
 	printf("Tes.test called arg:%d %d\n", a, b);
 	return a*b;
 }
-		
+	
 jreference environment::get_enclosing_method(jreference cls)
 {
 	claxx * meta = claxx::from_mirror(cls, get_thread());
-	auto enclosing_method = meta->get_attribute<enclosing_method_attr>();
-	if (!enclosing_method) return null;
+	auto enclosing_method = meta->get_attributes<enclosing_method_attr>();
+	if (enclosing_method.empty()) return null;
 
 	claxx * obj_array = bootstrap_load("[java/lang/Object;");
 	jreference ret = obj_array->instantiate(3, get_thread());
 
 	auto cpool = current_const_pool();
-	set_array_element(ret, 0, cpool->get_class(enclosing_method->class_index, get_thread())->mirror);
+	set_array_element(ret, 0, cpool->get_class(enclosing_method[0]->class_index, get_thread())->mirror);
 
-	auto name_and_type = get_thread()->current_frame->current_const_pool->get(enclosing_method->method_index)->value.i;
+	auto name_and_type = get_thread()->current_frame->current_const_pool->get(enclosing_method[0]->method_index)->value.i;
 	set_array_element(ret, 1, cpool->get_string(name_and_type >> 16, get_thread()));
 	set_array_element(ret, 2, cpool->get_string(name_and_type & 0xffff, get_thread()));
 	return ret;
@@ -278,9 +281,9 @@ jreference environment::get_enclosing_method(jreference cls)
 jreference environment::get_declaring_class(jreference cls)
 {
 	claxx * meta = claxx::from_mirror(cls, get_thread());
-	auto inner_attr = meta->get_attribute<inner_classes_attr>();
-	if (!inner_attr) return null;
-	for (auto inner_item : inner_attr->classes) {
+	auto inner_attr = meta->get_attributes<inner_classes_attr>();
+	if (inner_attr.empty()) return null;
+	for (auto inner_item : inner_attr[0]->classes) {
 		auto inner = current_const_pool()->get_class(inner_item.inner_class_info_index, get_thread());
 		if (inner != meta) continue;
 
@@ -288,6 +291,15 @@ jreference environment::get_declaring_class(jreference cls)
 		if (declaring) return declaring->mirror;
 	}
 	return null;
+}
+
+void environment::throw_exception(const std::string & name, const std::string & msg)
+{
+	claxx * meta = bootstrap_load(name);
+	auto init = meta->lookup_method("<init>", "(Ljava/lang/String;)V");
+	jreference e = meta->instantiate(get_thread());
+	callmethod(init, e ,create_string_intern(msg));
+	throw e;
 }
 
 void environment::dumpobj(jreference obj)

@@ -34,14 +34,12 @@ method * const_pool::get_method(u2 idx, thread * current_thread)
 	method_ref * sym_method = item->sym_method;
 	claxx * method_owner = get_class(sym_method->class_index,current_thread);
 	if (!method_owner) {
-		printf("class not found\n");
 		return nullptr;
 	}
 	method * ret = method_owner->lookup_method(sym_method->name->c_str(), sym_method->discriptor->c_str());
 	if (!ret) ret = method_owner->super_class->lookup_method(sym_method->name->c_str(), sym_method->discriptor->c_str());
 	if (!ret) {
 		for (claxx * interface : method_owner->interfaces) {
-			printf("find in %s\n", interface->name->c_str());
 			ret = interface->lookup_method(sym_method->name->c_str(), sym_method->discriptor->c_str());
 			if (ret) break;
 		}

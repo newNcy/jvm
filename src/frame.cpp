@@ -1,4 +1,5 @@
 #include "frame.h"
+#include "attribute.h"
 #include "class.h"
 #include "log.h"
 #include "memery.h"
@@ -94,9 +95,9 @@ frame::frame(thread * context,  method * to_call, array_stack * args)
 	 * 到这里铁可以被执行.分java/native
 	 */
 	
-	auto code_it = current_method->attributes.find("Code");
-	if (code_it != current_method->attributes.end()) {
-		code = (code_attr*)code_it->second;
+	auto codes = current_method->get_attributes<code_attr>();
+	if (!codes.empty()) {
+		code = (code_attr*)codes[0];
 		pc.set_buf((const char*)code->code, code->code_length);
 		stack = new array_stack(code->max_stacks);
 		locals = new array_stack(code->max_locals);

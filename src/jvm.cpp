@@ -110,14 +110,14 @@ void jvm::run(const std::vector<std::string> & args)
 		return;
 	}
 	
-	array_stack args_stack(args.size());
+	array_stack args_stack(1); // String [] args
 	auto s = cloader->load_class("java/lang/String", main_thread);
 	auto sa = s->get_array_claxx(main_thread);
 
-	jreference jargs = sa->instantiate(args.size(), main_thread);
-	for (int i = 0 ; i < args.size(); i++) {
+	jreference jargs = sa->instantiate(args.size() - 1, main_thread);
+	for (int i = 1 ; i < args.size(); i++) {
 		jreference str = main_thread->get_env()->create_string_intern(args[i]);
-		main_thread->get_env()->set_array_element(jargs, i, str);
+		main_thread->get_env()->set_array_element(jargs, i-1, str);
 	}
 	args_stack.push<jreference>(jargs);
 	main_thread->call(main_method, &args_stack);

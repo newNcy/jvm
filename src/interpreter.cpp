@@ -284,6 +284,15 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					current_thread->get_env()->set_array_element(arrayref, index, value);
 				}
 				break;
+			case LASTORE:
+				{
+					jlong value = stack->pop<jlong>();
+					jint index = stack->pop<jint>();
+					jreference arrayref = stack->pop<jreference>();
+					log::bytecode(this, op, "lastore", value, "to", arrayref, '[', index, ']');
+					current_thread->get_env()->set_array_element(arrayref, index, value);
+				}
+				break;
 			case AASTORE:
 				{
 					jint value = stack->pop<jint>();
@@ -339,6 +348,14 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					jlong top = stack->top<jlong>();
 					stack->push(top);
 					log::bytecode(this, op, "dup2", top);
+				}
+				break;
+			case DUP2_X1:
+				{
+					jint v3, v2, v1;
+					stack->pop(v3, v2, v1);
+					stack->push(v2, v1, v3, v2, v1);
+					log::bytecode(this, op, "dup2_x1", v3, v2, v1);
 				}
 				break;
 			case IADD:
@@ -1011,7 +1028,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 				break;
 			case ATHROW:
 				{
-					log::bytecode(this, op, "athrow\n");
+					log::bytecode(this, op, "athrow");
 					jreference e = stack->pop<jreference>();
 					handle_exception(e);
 				}

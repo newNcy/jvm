@@ -349,7 +349,7 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 		u2 attr_count = stream.get<u2>();
 		while (attr_count --) {
 			attribute * attr = parse_attribute(stream, raw_pool);
-			if (attr) f->attributes[attr->name->c_str()] = attr;
+			if (attr) f->attributes.push_back(attr);
 			else {
 				//printf("parsing filed attr failed\n");
 			}
@@ -393,7 +393,7 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 		u2 attr_count = stream.get<u2>();
 		while (attr_count --) {
 			attribute * attr = parse_attribute(stream, raw_pool);
-			if (attr) m->attributes[attr->name->c_str()] = attr;
+			if (attr) m->attributes.push_back(attr);
 			else {
 				printf("parsing method attr failed\n");
 			}
@@ -404,7 +404,7 @@ claxx * classloader::load_class(byte_stream & stream, thread * current_thread)
 	u2 attr_count = stream.get<u2>();
 	while (attr_count --) {
 		attribute * attr = parse_attribute(stream, raw_pool);
-		if (attr) java_class->attributes[attr->name->c_str()] = attr;
+		if (attr) java_class->attributes.push_back(attr);
 	}	
 
 	for (auto info : raw_pool_entries) {
@@ -640,7 +640,7 @@ attribute * classloader::parse_attribute(byte_stream & stream,const raw_const_po
 		u2 attr_count = stream.get<u2>();
 		while (attr_count --) {
 			attribute * attr = parse_attribute(stream, cpool);
-			if (attr) code->attributes[attr->name->c_str()] = attr;
+			if (attr) code->attributes.push_back(attr);
 		}
 		ret = code;
 	}else if (name->equals("StackMapTable")) {

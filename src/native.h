@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 #include "frame.h"
+#include "log.h"
 class jvm;
 
 using fieldID = void*;
@@ -53,6 +54,8 @@ class environment
 		methodID lookup_method_by_class(jreference cls, const std::string & name, const std::string & dis);
 		jreference clone_object(jreference obj);
 		jreference lookup_class(const std::string & name);
+		
+		void throw_exception(const std::string & name, const std::string & msg);
 
 		template <typename ... Args>
 		jvalue callmethod(methodID m, Args ... args);
