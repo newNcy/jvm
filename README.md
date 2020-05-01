@@ -23,4 +23,4 @@
 ### 运行输出
 ![stdout](https://github.com/newNcy/jvm/blob/master/screenshot/%24EN9WYEQY3%40GTQ7QZ17%7BN3T.png)
 
-![stderr for debug](https://github.com/newNcy/jvm/blob/master/screenshot/%7BVP3V)2AZLW4%243%7BHNEWY4V4.png)
+![stderr for debug](https://github.com/newNcy/jvm/blob/master/screenshot/2.png)
