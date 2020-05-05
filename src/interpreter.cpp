@@ -60,7 +60,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 				break;
 			case BIPUSH:
 					{
-						jint v = pc.get<u1>();
+						jint v = pc.get<char>();
 						stack->push(v);
 						log::bytecode(this, op, "bipush ", v);
 					}
