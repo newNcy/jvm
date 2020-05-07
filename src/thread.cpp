@@ -121,7 +121,7 @@ jvalue thread::call(method * m, array_stack * args)
 					}
 					log.printf("(%s):%d", f->current_const_pool->get(f->current_class->get_attributes<source_attr>()[0]->sourcefile_index)->utf8_str->c_str(), line);
 				}
-				log.show();
+				fprintf(stderr, "%s", log.buf);
 				delete f;
 			}
 			exit(0);
@@ -139,10 +139,14 @@ jreference thread::create_string(const std::string & bytes)
 }
 
 
-thread::thread(jvm * this_vm): runtime_env(this_vm, this)
+thread::thread(jvm * this_vm, jreference m): runtime_env(this_vm, this)
 {
-	auto java_lang_Thread = this_vm->get_class_loader()->load_class("java/lang/Thread", this);
-	this->mirror = java_lang_Thread->instantiate(this);
-	auto f = java_lang_Thread->lookup_field("priority");
-	get_env()->set_object_field(this->mirror, f, 5);
+	if (m) {
+		this->mirror = m;
+	}else {
+		auto java_lang_Thread = this_vm->get_class_loader()->load_class("java/lang/Thread", this);
+		this->mirror = java_lang_Thread->instantiate(this);
+		auto f = java_lang_Thread->lookup_field("priority");
+		get_env()->set_object_field(this->mirror, f, 5);
+	}
 }

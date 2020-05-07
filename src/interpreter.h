@@ -96,6 +96,7 @@ enum {
 	DADD			= 0x63,
 	ISUB			= 0x64,
 	IMUL			= 0x68,
+	LMUL			= 0x69,
 	FMUL			= 0x6a,
 	IDIV			= 0x6c,
 	FDIV			= 0x6e,

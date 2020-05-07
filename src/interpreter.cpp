@@ -395,7 +395,15 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					jint v1, v2;
 					stack->pop(v1, v2);
 					stack->push(v1*v2);
-					log::bytecode(this, op, "mul", v1, v2);
+					log::bytecode(this, op, "imul", v1, v2);
+				}
+				break;
+			case LMUL:
+				{
+					jlong v1, v2;
+					stack->pop(v1, v2);
+					stack->push(v1*v2);
+					log::bytecode(this, op, "lmul", v1, v2);
 				}
 				break;
 			case FMUL:
@@ -1090,7 +1098,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 				}
 				break;
 			default:
-				log::debug("unkown instruction 0x%02x\n", op);
+				printf("unkown instruction 0x%02x\n", op);
 				fflush(stdout);
 				abort();
 		}

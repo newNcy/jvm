@@ -35,7 +35,7 @@ class jvm
 	void on_global_signal(int, siginfo_t*, void*);
 	void on_signal(int sig);
 	vm_native vm_native_methods;
-	thread * new_thread();
+	thread * new_thread(jreference m = 0);
 	jvm();
 	classloader * get_class_loader() { return cloader; }
 	void init_baisc_type();

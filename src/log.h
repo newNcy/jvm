@@ -61,6 +61,7 @@ struct logstream
 	}
 	void show(FILE * out = stderr)
 	{
+		return;
 		fprintf(out, "%s\n", buf);
 		fflush(out);
 	}
@@ -167,6 +168,7 @@ inline void logstream::print(double i)
 template <typename ... Args> 
 void log::bytecode (frame * f, u1 op, const char * text, Args ... args)
 {
+	return;
 	struct winsize size;
 	ioctl(STDOUT_FILENO, TIOCGWINSZ, &size);
 

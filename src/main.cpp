@@ -61,7 +61,7 @@ int main(int argc, char * argv[])
 	vm.load_jar("charsets.jar");
 	vm.load_jar("rt.jar");
 
-	//signal(SIGABRT, sighandle);
+	signal(SIGINT, sighandle);
 	vm.run(args);
 #else
 	

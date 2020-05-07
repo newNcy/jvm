@@ -37,7 +37,7 @@ jreference memery::alloc_heap_array(claxx * meta, size_t length)
 object * memery::ref2oop(jreference ref)
 {
 	auto res = ref_oop_map.find(ref);
-	if ( res == ref_oop_map.end()) throw "java/lang/NullpointerException";
+	if ( res == ref_oop_map.end()) throw "java/lang/NullPointerException";
 	return res->second;
 }
 

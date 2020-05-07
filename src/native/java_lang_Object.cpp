@@ -26,3 +26,7 @@ NATIVE jreference java_lang_Object_getClass(environment * env, jreference obj)
 NATIVE void java_lang_Object_notifyAll(environment * env, jreference obj)
 {
 }
+
+NATIVE void java_lang_Object_wait(environment * env, jreference obj)
+{
+}

@@ -37,6 +37,7 @@ int logstream::printf(const char * f, ...)
 	
 void log::object(jreference obj)
 {
+	return;
 	::object * oop = object::from_reference(obj);
 	claxx * meta = oop->meta;
 	log::trace("[%d] of class %s", obj, meta->name->c_str());

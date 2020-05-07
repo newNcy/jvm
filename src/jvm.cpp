@@ -25,9 +25,10 @@ void jvm::load_jar(const std::string & runtime_path)
 	//cloader->load_jar(runtime_path);
 }
 
-thread * jvm::new_thread()
+thread * jvm::new_thread(jreference m)
 {
-	thread * ret = new thread(this);
+	thread * ret = new thread(this, m);
+
 	if (!thread_group) {
 		claxx * java_lang_ThreadGroup = cloader->load_class("java/lang/ThreadGroup", ret);
 		thread_group = java_lang_ThreadGroup->instantiate(ret);

@@ -23,7 +23,7 @@ struct thread
 	frame			* current_frame = nullptr;
 	std::vector<frame*> abrupt_frames;
 	environment runtime_env;
-	thread(jvm * this_vm);
+	thread(jvm * this_vm, jreference m = 0 );
 	environment * get_env() { return &runtime_env; }
 	jreference create_string(const std::string & bytes);
 	jvalue call(method * m,array_stack * args = nullptr);
