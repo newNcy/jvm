@@ -4,6 +4,7 @@
 #include <cstring>
 #include <string>
 #include <unistd.h>
+#include <mutex>
 #include <utility>
 #include "log.h"
 
@@ -63,7 +64,7 @@ struct io_buffer
 
 std::map<int, io_buffer> buffers;
 
-
+std::mutex mtx;
 NATIVE jint java_io_FileOutputStream_writeBytes(environment * env, jreference fos, jreference bs, jint start, jint length, jboolean z)
 {
 	fosfd = env->lookup_field_by_object(fos, "fd");
@@ -72,18 +73,22 @@ NATIVE jint java_io_FileOutputStream_writeBytes(environment * env, jreference fo
 
 	jint fd = env->get_object_field(file_disc, fd_id);
 	object * oop = object::from_reference(bs);
+	mtx.lock();
+	int ret = 0;
 #if 1
 	auto buf = buffers.find(fd);
 	if (buf != buffers.end()) {
-		return buf->second.write(oop->data + start, length);
+		ret = buf->second.write(oop->data + start, length);
 	}else {
 		auto & buffer = buffers[fd];
 		buffer.fd = fd;
-		return buffer.write(oop->data + start, length);
+		ret = buffer.write(oop->data + start, length);
 	}
 #else 
-	return write(fd, oop->data + start, length);
+	ret = write(fd, oop->data + start, length);
 #endif
+	mtx.unlock();
+	return ret;
 }
 
 

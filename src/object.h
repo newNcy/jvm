@@ -1,6 +1,7 @@
 #pragma once
 
 #include "class.h"
+#include "monitor.h"
 class claxx;
 
 struct object
@@ -9,6 +10,7 @@ struct object
 	static object * from_reference(jreference ref);
 	bool is_static_obj = false;
 	int element_count = 0;
+	monitor mnt;
 	bool is_array() { return meta->is_array(); }
 	bool is_instance(claxx * cls) 
 	{ 

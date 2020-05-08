@@ -77,14 +77,14 @@ void jvm::init_baisc_type()
 }
 void jvm::init(thread * current_thread)
 {
-	claxx * class_class = cloader->load_class("java/lang/Class", current_thread);
+	claxx * class_class = java_lang_Class.Class(current_thread);
 	init_baisc_type();
-	claxx * system_class = cloader->load_class("java/lang/System", current_thread);
+	claxx * system_class = java_lang_System.Class(current_thread);
 	method * init_system_class = system_class->lookup_method("initializeSystemClass", "()V");
 	cloader->initialize_class(system_class, current_thread);
 	if (!init_system_class) return;
 	current_thread->call(init_system_class);
-	claxx * string_class = cloader->load_class("java/lang/String", current_thread);
+	claxx * string_class = java_lang_String.Class( current_thread);
 }
 
 void jvm::run(const std::vector<std::string> & args)
@@ -120,8 +120,20 @@ void jvm::run(const std::vector<std::string> & args)
 		jreference str = main_thread->get_env()->create_string_intern(args[i]);
 		main_thread->get_env()->set_array_element(jargs, i-1, str);
 	}
-	args_stack.push<jreference>(jargs);
-	main_thread->call(main_method, &args_stack);
+	main_thread->call(main_method, jargs);
+	bool all_done = false;
+	while (!all_done) {
+		all_done = true;
+		for (auto it = threads.begin() ; it != threads.end(); it ++) {
+			if ((*it)->is_daemon()) continue;
+			if ((*it)->finish) {
+				//delete *it;
+				//it = threads.erase(it);
+			}else {
+				all_done = false;
+			}
+		}
+	}
 } 
 
 jvm::~jvm()

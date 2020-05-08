@@ -29,8 +29,8 @@ void sighandle(int s)
 					t->current_frame->current_method->name->c_str(),
 					t->current_frame->current_method->discriptor->c_str()
 				  );
-			t->current_frame->print_stack();
-			t->current_frame->print_locals();
+			//t->current_frame->print_stack();
+			//t->current_frame->print_locals();
 			t->pop_frame();
 		}
 	}

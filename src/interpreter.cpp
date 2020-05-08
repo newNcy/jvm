@@ -1051,7 +1051,7 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 					log::bytecode(this, op, "checkcast", stack->top<jreference>(), "to", cls->name->c_str());
 					if (obj && !obj->meta->check_cast_to(cls)) {
 						//stack->pop<jreference>();
-						throw "java/lang/ClassCastException";
+						throw_exception("java/lang/ClassCastException");
 					}
 				}
 				break;
@@ -1071,14 +1071,16 @@ jvalue frame::interpreter(const char * a, const char * b, const char * c)
 				break;
 			case MONITERENTER:
 				{
-					log::bytecode(this, op, "monitor enter", stack->top<jreference>());
-					stack->pop<jreference>();
+					jreference obj = stack->pop<jreference>();
+					log::bytecode(this, op, "monitor enter", obj);
+					object::from_reference(obj)->mnt.enter(current_thread);
 				}
 				break;
 			case MONITEREXIT:
 				{
-					log::bytecode(this, op, "monitor exit", stack->top<jreference>());
-					stack->pop<jreference>();
+					jreference obj = stack->pop<jreference>();
+					log::bytecode(this, op, "monitor exit", obj);
+					object::from_reference(obj)->mnt.exit(current_thread);
 				}
 				break;
 			case IFNULL:

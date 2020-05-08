@@ -182,7 +182,7 @@ jvalue frame::native()
 		current_method->native_method = fn;
 	}
 	if (!fn) {
-		throw std::runtime_error(vm_native::trans_method_name(current_method));//;"java/lang/UnsatisfiedLinkError";
+		throw std::runtime_error(vm_native::trans_method_name(current_method) + current_method->discriptor->c_str());//;"java/lang/UnsatisfiedLinkError";
 	}
 
 	uint32_t arg_count = current_method->arg_types.size() + 2;//Env指针,this/class指针

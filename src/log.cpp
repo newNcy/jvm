@@ -8,6 +8,7 @@
 int log::debug(const char * f, ...)
 {
 	int ret = 0;
+	return ret;
 	BUFFER_MSG(buff, 4096, ret);
 	ret = fprintf(stderr, "%s\n", buff);
 	fflush(stderr);
@@ -17,6 +18,7 @@ int log::debug(const char * f, ...)
 int log::trace(const char * f, ...)
 {
 	int ret = 0;
+	return ret;
 	BUFFER_MSG(buff, 4096, ret);
 	ret = fprintf(stderr, "%s\n", buff);
 	fflush(stderr);

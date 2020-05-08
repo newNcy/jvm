@@ -20,6 +20,7 @@
 #include <ffi.h>
 #include <stdexcept>
 #include <stdio.h>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -93,13 +94,14 @@ jvalue thread::call(method * m, array_stack * args)
 		abrupt_frames.push_back(current_frame); //收起来
 		current_frame = current_frame->caller_frame;
 		if (!current_frame) {
+			abort();
 			object * oop = object::from_reference(e);
 			auto get_msg = oop->meta->lookup_method("getMessage","()Ljava/lang/String;");
 			jreference msg_ref  = get_env()->callmethod(get_msg, e);
-			log::debug("throw %s(%s):", oop->meta->name->c_str(), msg_ref ? get_env()->get_utf8_string(msg_ref).c_str() : "no msg");
+			logstream log(2024);
+			log.printf("throw %s(%s):", oop->meta->name->c_str(), msg_ref ? get_env()->get_utf8_string(msg_ref).c_str() : "no msg");
 			for (auto f : this->abrupt_frames) {
 				int line = 0;
-				logstream log(2024);
 				log.printf("\tat %s.%s ", 
 							f->current_class->name->c_str(), 
 							f->current_method->name->c_str());
@@ -129,6 +131,7 @@ jvalue thread::call(method * m, array_stack * args)
 			throw e;
 		}
 	}
+	if (!current_frame) finish = true;
 
 	return ret;
 }
@@ -144,9 +147,19 @@ thread::thread(jvm * this_vm, jreference m): runtime_env(this_vm, this)
 	if (m) {
 		this->mirror = m;
 	}else {
-		auto java_lang_Thread = this_vm->get_class_loader()->load_class("java/lang/Thread", this);
-		this->mirror = java_lang_Thread->instantiate(this);
-		auto f = java_lang_Thread->lookup_field("priority");
-		get_env()->set_object_field(this->mirror, f, 5);
+		this->mirror = java_lang_Thread.Class(this)->instantiate(this);
 	}
+	auto f = java_lang_Thread.Class()->lookup_field("priority");
+	get_env()->set_object_field(this->mirror, f, 5);
+}
+	
+bool thread::is_daemon()
+{
+	auto f = java_lang_Thread.Class()->lookup_field("daemon");
+	return get_env()->get_object_field(mirror, f).z;
+}
+void thread::start()
+{
+	auto m = get_env()->lookup_method_by_object(this->mirror, "run", "()V");
+	this->call(static_cast<method*>(m), mirror);
 }
