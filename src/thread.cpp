@@ -94,12 +94,11 @@ jvalue thread::call(method * m, array_stack * args)
 		abrupt_frames.push_back(current_frame); //收起来
 		current_frame = current_frame->caller_frame;
 		if (!current_frame) {
-			abort();
 			object * oop = object::from_reference(e);
 			auto get_msg = oop->meta->lookup_method("getMessage","()Ljava/lang/String;");
 			jreference msg_ref  = get_env()->callmethod(get_msg, e);
 			logstream log(2024);
-			log.printf("throw %s(%s):", oop->meta->name->c_str(), msg_ref ? get_env()->get_utf8_string(msg_ref).c_str() : "no msg");
+			log.printf("throw %s(%s):\n", oop->meta->name->c_str(), msg_ref ? get_env()->get_utf8_string(msg_ref).c_str() : "no msg");
 			for (auto f : this->abrupt_frames) {
 				int line = 0;
 				log.printf("\tat %s.%s ", 
@@ -108,7 +107,7 @@ jvalue thread::call(method * m, array_stack * args)
 
 
 				if (f->current_method->is_native()) {
-					log.printf("(native code)");
+					log.printf("(native code)\n");
 				}else {
 					auto linetbs = f->code->get_attributes<line_number_table_attr>();
 					int line = -1;
@@ -121,7 +120,7 @@ jvalue thread::call(method * m, array_stack * args)
 						}
 						if (line != -1) break;
 					}
-					log.printf("(%s):%d", f->current_const_pool->get(f->current_class->get_attributes<source_attr>()[0]->sourcefile_index)->utf8_str->c_str(), line);
+					log.printf("(%s):%d\n", f->current_const_pool->get(f->current_class->get_attributes<source_attr>()[0]->sourcefile_index)->utf8_str->c_str(), line);
 				}
 				fprintf(stderr, "%s", log.buf);
 				delete f;

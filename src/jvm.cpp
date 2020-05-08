@@ -124,12 +124,13 @@ void jvm::run(const std::vector<std::string> & args)
 	bool all_done = false;
 	while (!all_done) {
 		all_done = true;
-		for (auto it = threads.begin() ; it != threads.end(); it ++) {
+		for (auto it = threads.begin() ; it != threads.end(); ){
 			if ((*it)->is_daemon()) continue;
 			if ((*it)->finish) {
-				//delete *it;
-				//it = threads.erase(it);
+				delete *it;
+				it = threads.erase(it);
 			}else {
+				++ it;
 				all_done = false;
 			}
 		}
