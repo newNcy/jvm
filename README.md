@@ -60,7 +60,7 @@ while (!all_done) {
 
 ![三个线程分别打印自己名字（类名:序号）](https://github.com/newNcy/jvm/blob/master/screenshot/3.png) 
 
-结果乱七八糟，而且有时候还会出现奇奇怪怪的异常。瞎猜一下，可能是由于monitor机制没有实现的原因。设想利用c++的[condition_variable]https://en.cppreference.com/w/cpp/thread/condition_variable 实现。大致如下
+结果乱七八糟，而且有时候还会出现奇奇怪怪的异常。瞎猜一下，可能是由于monitor机制没有实现的原因。设想利用c++的[condition_variable][cv]实现。大致如下
 ```c++
 /* .h */
 class monitor
@@ -108,3 +108,6 @@ exit时减少entry count,唤醒其他阻塞的线程
 ![两次顺序不一样](https://github.com/newNcy/jvm/blob/master/screenshot/4.png) 
 
 所以基本可以确定是由于多个线程对类似System.out这种公共资源的使用在java层面上实现是互斥的，而当jvm没有相应机制支持时出现的问题。
+
+
+[cv]:https://en.cppreference.com/w/cpp/thread/condition_variable
