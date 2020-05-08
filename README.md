@@ -24,3 +24,9 @@
 ![stdout](https://github.com/newNcy/jvm/blob/master/screenshot/%24EN9WYEQY3%40GTQ7QZ17%7BN3T.png)
 ![stderr for debug](https://github.com/newNcy/jvm/blob/master/screenshot/2.png)
 左边是当前运行的字节码具体信息，右边是栈和局部变量
+
+# 开发记录
+## 多线程支持
+java线程在开始运行前是个普通的java对象，语言标准里貌似有线程状态啥的，这是java层面上的细节，现在在jvm层先略过，首要目标是能跑起来多线程代码。
+
+
