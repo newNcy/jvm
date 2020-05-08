@@ -11,7 +11,7 @@
 + 异常
 
 # 还需要
-+ 多线程
++ 多线程 :heavy_check_mark: 
 + 垃圾回收
 + 更加规范的结构和流程
 
@@ -44,19 +44,67 @@ NATIVE void java_lang_Thread_start0(environment * env, jreference cls)
 main_thread->call(main_method, jargs);
 bool all_done = false;
 while (!all_done) {
-  all_done = true;
-  for (auto it = threads.begin() ; it != threads.end(); it ++) {
-     if ((*it)->is_daemon()) continue;
-     if ((*it)->finish) {
-          it = threads.erase(it);
-     }else {
-          all_done = false;
-     }
-  }
- }
+	all_done = true;
+	for (auto it = threads.begin() ; it != threads.end(); it ++) {
+		if ((*it)->is_daemon()) continue;
+		if ((*it)->finish) {
+			it = threads.erase(it);
+		}else {
+			all_done = false;
+		}
+	}
+}
 ...
 ```
 运行结果：
-![三个线程分别打印自己名字（类名:序号）](https://github.com/newNcy/jvm/blob/master/screenshot/3.png) 
-结果乱七八糟，而且有时候还会出现奇奇怪怪的异常。
 
+![三个线程分别打印自己名字（类名:序号）](https://github.com/newNcy/jvm/blob/master/screenshot/3.png) 
+
+结果乱七八糟，而且有时候还会出现奇奇怪怪的异常。瞎猜一下，可能是由于monitor机制没有实现的原因。设想利用c++的[condition_variable]https://en.cppreference.com/w/cpp/thread/condition_variable 实现。大致如下
+```c++
+/* .h */
+class monitor
+{
+	private:
+		std::condition_variable enter_lock;
+		std::mutex modify_lock; //确保操作都是互斥的
+		thread * owner = nullptr;
+		uint32_t entry_count = 0;
+	public:
+		void enter(thread * t);
+		void exit(thread * t);
+};
+
+
+/* .cpp */
+
+void monitor::enter(thread * t) 
+{
+	std::unique_lock<std::mutex> _(modify_lock);
+	enter_lock.wait(_, [this, t] { return entry_count == 0 || owner == t; });
+	entry_count ++;
+	owner = t;
+	_.unlock();
+}
+
+
+void monitor::exit(thread * t) 
+{
+	std::lock_guard<std::mutex> _(modify_lock);
+	if (owner != t) return;
+	entry_count --;
+	enter_lock.notify_one();
+}
+
+```
+
+思路:
+
+enter时阻塞直到entry count变成0,或者当前所有者是自己,被唤醒后将entry count加一，所有者设置成自己
+exit时减少entry count,唤醒其他阻塞的线程
+
+在object类里加入monitor成员，在moniter enter和monitor exit操作时对应调用，运行结果如下
+
+![两次顺序不一样](https://github.com/newNcy/jvm/blob/master/screenshot/4.png) 
+
+所以基本可以确定是由于多个线程对类似System.out这种公共资源的使用在java层面上实现是互斥的，而当jvm没有相应机制支持时出现的问题。
