@@ -1,29 +1,28 @@
 
 
-class A
-{
-	public int c = 0;
+public class Test{
+	public static void main(String[] args) throws Exception {
+		final int count = 10;
+		Thread[] threads = new Thread[count];
+		for (int i = 0; i < count; i++) {
+			threads[i] = new RandomThread("RandomThread:" + i);
+		}
+		for(Thread thread : threads) {
+			thread.start();
+		}
+		System.out.println("main exit");
+		throw new Exception("just throw");
+	}
 }
 
-class Test extends A
-{
-	int a = 0;
-	public int b (int a,char [] cs)
-	{
-		return a + 2;
+class RandomThread extends Thread {
+
+	public RandomThread(String name) {
+		super(name);
 	}
-	public static int a(int a, int b) 
-	{
-		return a + b;
-	}
-	public static native int test();
-	public static void main (String [] args)
-	{
-		//char [] cs = new char[10];
-		//Test [] ts = new Test[2];
-		//ts[0] = new Test();
-		test();
-		System.out.println("hello world");
-		//ts[0].a(2,3);
+
+	@Override
+	public void run() {
+		System.out.println(getName());
 	}
 }
