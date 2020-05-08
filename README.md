@@ -57,6 +57,6 @@ while (!all_done) {
 ...
 ```
 运行结果：
-![三个线程分别打印自己名字（类名:序号）](https://github.com/newNcy/jvm/blob/master/screenshot/3.png)
+![三个线程分别打印自己名字（类名:序号）](https://github.com/newNcy/jvm/blob/master/screenshot/3.png) 
 结果乱七八糟，而且有时候还会出现奇奇怪怪的异常。
 
