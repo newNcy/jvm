@@ -45,12 +45,13 @@ main_thread->call(main_method, jargs);
 bool all_done = false;
 while (!all_done) {
 	all_done = true;
-	for (auto it = threads.begin() ; it != threads.end(); it ++) {
+	for (auto it = threads.begin() ; it != threads.end(); ) {
 		if ((*it)->is_daemon()) continue;
 		if ((*it)->finish) {
 			it = threads.erase(it);
 		}else {
 			all_done = false;
+                        it ++;
 		}
 	}
 }
